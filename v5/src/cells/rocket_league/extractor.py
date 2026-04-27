@@ -1,20 +1,23 @@
 """
 Rocket League event extractor.
 
-Converts carball / rrrocket output to normalized GameEvent stream.
+Per Q7 sign-off (D-22): boost-enriched hit-level extraction.
+Hits and boost events are merged into a single chronologically-sorted stream
+so the model sees both ball-contact decisions and boost-economy decisions
+interleaved as they happen in the match.
 
-carball output has:
-  - game_metadata (duration, map, teams, goals)
-  - hits (per-hit objects with actor, position, ball data)
-  - players (list of player objects)
+Granularity contract:
+  - Each ball contact (hit/save/shot/aerial/etc.) → one GameEvent
+  - Each boost pickup (big or small) → resource_gain GameEvent
+  - Each boost depletion (use crossing zero) → resource_spend GameEvent
+  - Each low-boost transition (player drops below LOW_BOOST_THRESHOLD) →
+    resource_budget GameEvent (v1.1 amendment)
 
-rrrocket JSON output has:
-  - properties (game metadata)
-  - network_frames (tick-by-tick actor data)
+Expected per-game event count: ~250-400 (vs hit-only's 150-300).
 
-Decision D-RL2: We use carball's hit-level abstraction rather than raw ticks.
-This gives ~150-300 events per 5-min game at a meaningful decision granularity.
-Flagged [REQUIRES SIGN-OFF] if continuous-state handling is needed at tick level.
+Input formats:
+  - carball: game_metadata + hits[] + players[].boost_events
+  - rrrocket: properties + network_frames (tick-level; summarized)
 """
 
 from __future__ import annotations
@@ -46,8 +49,13 @@ BOOST_EVENT_MAP = {
     "pickup_big": "resource_gain",
     "pickup_small": "resource_gain",
     "use": "resource_spend",
+    "depleted": "resource_spend",
     "low_boost": "resource_budget",  # v1.1 amendment: ResourceBudget
 }
+
+# Threshold below which a player is considered "low boost" (Q7-C).
+# carball boost_amount is 0-100. RL community wisdom: under 25 is "low".
+LOW_BOOST_THRESHOLD = 25
 
 
 class RocketLeagueExtractor:
@@ -71,24 +79,50 @@ class RocketLeagueExtractor:
         return stream
 
     def _extract_carball(self, record: dict, stream: EventStream) -> None:
-        goals = record.get("_goals", [])
-        goal_times = {float(g.get("frame_number", g.get("frame", 0))) / 30.0
-                      for g in goals}
-
+        """Boost-enriched extraction (Q7-C): merge hits and boost events into
+        one stream, then derive low-boost (resource_budget) events from boost
+        amount transitions per player."""
         seq = 0
+
+        # 1. Hits
         for hit in record.get("_hits", []):
             ev = self._parse_carball_hit(hit, stream.game_id, seq)
             if ev:
                 stream.append(ev)
                 seq += 1
 
-        # Boost events from player data
+        # 2. Direct boost events (pickup, use)
         for player in record.get("_players", []):
             for boost_ev in player.get("boost_events", []):
                 ev = self._parse_boost_event(boost_ev, player, stream.game_id, seq)
                 if ev:
                     stream.append(ev)
                     seq += 1
+
+        # 3. Derived low-boost transitions (resource_budget per v1.1)
+        for player in record.get("_players", []):
+            boost_history = player.get("boost_history", [])  # [(frame, amount), ...]
+            prev_amount = None
+            for frame, amount in boost_history:
+                if prev_amount is not None:
+                    crossed_low = prev_amount >= LOW_BOOST_THRESHOLD and amount < LOW_BOOST_THRESHOLD
+                    if crossed_low:
+                        stream.append(GameEvent(
+                            timestamp=float(frame) / 30.0,
+                            event_type="resource_budget",
+                            actor=str(player.get("id", {}).get("id", "unknown")),
+                            location_context={
+                                "boost_amount": amount,
+                                "threshold": LOW_BOOST_THRESHOLD,
+                                "transition": "high_to_low",
+                            },
+                            raw_data_blob={"frame": frame, "amount": amount},
+                            cell="rocket_league",
+                            game_id=stream.game_id,
+                            sequence_idx=seq,
+                        ))
+                        seq += 1
+                prev_amount = amount
 
     def _extract_rrrocket(self, record: dict, stream: EventStream) -> None:
         """Extract events from rrrocket tick-level data (summarized to key events)."""

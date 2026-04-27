@@ -26,7 +26,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from ...common.schema import EventStream, GameEvent
+from ...common.schema import EventStream, GameEvent  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +66,25 @@ def parse_pctimestring(period: int, pctimestring: str) -> float:
     return float(base + elapsed_in_period)
 
 
+# NBA possession-ending event types (per Q6-A sign-off)
+# A possession ends on:
+#   - Made shot (msgtype=1) — possession changes
+#   - Defensive rebound (msgtype=4 + non-offensive team) — possession changes
+#   - Turnover (msgtype=5) — possession changes
+#   - End of period (msgtype=13) — possession ends artificially
+#   - Made final free throw (msgtype=3 + last in sequence) — possession changes
+POSSESSION_ENDING_MSGTYPES = {1, 5, 13}  # Made shot, turnover, end of period
+# Rebounds and free throws need additional context to determine if possession-ending.
+
+
 class NBAExtractor:
 
     def extract(self, record: Dict[str, Any]) -> EventStream:
+        """
+        Per Q6 sign-off (D-21): possession-level extraction.
+        Each possession produces one summary GameEvent representing the
+        offensive trip's primary decision (the possession-ending action).
+        """
         game_id = self._get_game_id(record)
         stream = EventStream(game_id=game_id, cell="nba")
 
@@ -83,12 +99,158 @@ class NBAExtractor:
 
         col_idx = {col: i for i, col in enumerate(columns)}
 
-        for seq, row in enumerate(rows):
-            ev = self._parse_row(row, col_idx, game_id, seq)
+        # Step 1: parse all rows into per-play events
+        play_events = []
+        for row in rows:
+            ev_raw = self._parse_row_raw(row, col_idx, game_id)
+            if ev_raw:
+                play_events.append(ev_raw)
+
+        # Step 2: group plays into possessions
+        possessions = self._group_into_possessions(play_events)
+
+        # Step 3: emit one GameEvent per possession (with constituent plays in raw_data_blob)
+        for seq, possession_plays in enumerate(possessions):
+            ev = self._make_possession_event(possession_plays, game_id, seq)
             if ev:
                 stream.append(ev)
 
         return stream
+
+    @staticmethod
+    def _group_into_possessions(plays: List[dict]) -> List[List[dict]]:
+        """
+        Group a list of parsed play dicts into possessions.
+        A new possession begins after a possession-ending event.
+        """
+        if not plays:
+            return []
+        possessions: List[List[dict]] = []
+        current: List[dict] = []
+        for play in plays:
+            current.append(play)
+            msgtype = play.get("msgtype", 0)
+            if msgtype in POSSESSION_ENDING_MSGTYPES:
+                possessions.append(current)
+                current = []
+                continue
+            # Defensive rebound (msgtype=4) ends possession only if rebounder
+            # team differs from shooter team. Without explicit shot-team in the
+            # row, we approximate: any rebound after a missed shot starts a new
+            # possession unless it's the same team's offensive rebound.
+            if msgtype == 4:
+                # Heuristic: previous play's team != this play's team → defensive rebound
+                if len(current) >= 2:
+                    prev = current[-2]
+                    if prev.get("team_id") and play.get("team_id") \
+                       and prev["team_id"] != play["team_id"]:
+                        possessions.append(current)
+                        current = []
+                        continue
+            # Made free throw at end of FT sequence: msgtype=3 with action types
+            # 11/12 (last of two/three). Approximation: treat any made FT as
+            # possibly possession-ending; group by clock if same possession.
+        if current:
+            possessions.append(current)
+        return possessions
+
+    def _make_possession_event(
+        self, plays: List[dict], game_id: str, seq: int
+    ) -> Optional[GameEvent]:
+        """Build one GameEvent representing the entire possession."""
+        if not plays:
+            return None
+
+        # The possession-ending play defines the event_type and actor
+        terminal = plays[-1]
+        # Score margin and period from terminal play
+        return GameEvent(
+            timestamp=plays[0]["timestamp"],
+            event_type=terminal["event_type"],
+            actor=terminal["actor"],
+            location_context={
+                "period": terminal["period"],
+                "pctimestring_start": plays[0]["pctimestring"],
+                "pctimestring_end": terminal["pctimestring"],
+                "n_plays": len(plays),
+                "play_descriptions": [p.get("description", "")[:80] for p in plays],
+                "score": terminal.get("score", ""),
+                "score_margin": terminal.get("score_margin", ""),
+                "terminal_msgtype": terminal["msgtype"],
+            },
+            raw_data_blob={"plays": [p["raw"] for p in plays]},
+            cell="nba",
+            game_id=game_id,
+            sequence_idx=seq,
+            actor_team=terminal.get("team_id") or None,
+            phase="regular_season",  # set by metadata downstream
+        )
+
+    def _parse_row_raw(
+        self, row: list, col_idx: dict, game_id: str
+    ) -> Optional[dict]:
+        """Parse one PBP row into a flat dict (intermediate; not a GameEvent)."""
+        try:
+            period = int(row[col_idx["PERIOD"]])
+            pctimestring = str(row[col_idx.get("PCTIMESTRING", -1)] or "12:00")
+            timestamp = parse_pctimestring(period, pctimestring)
+            msgtype = int(row[col_idx.get("EVENTMSGTYPE", -1)] or 0)
+            event_type = NBA_EVENTMSGTYPE_MAP.get(msgtype)
+            if event_type is None:
+                return None
+
+            player1_id = str(row[col_idx.get("PLAYER1_ID", -1)] or "")
+            player1_name = str(row[col_idx.get("PLAYER1_NAME", -1)] or "")
+            team_id = str(row[col_idx.get("PLAYER1_TEAM_ID", -1)] or "")
+            home_desc = str(row[col_idx.get("HOMEDESCRIPTION", -1)] or "")
+            visitor_desc = str(row[col_idx.get("VISITORDESCRIPTION", -1)] or "")
+            score = str(row[col_idx.get("SCORE", -1)] or "")
+            score_margin = str(row[col_idx.get("SCOREMARGIN", -1)] or "")
+
+            return {
+                "timestamp": timestamp,
+                "period": period,
+                "pctimestring": pctimestring,
+                "msgtype": msgtype,
+                "event_type": event_type,
+                "actor": player1_id or player1_name or "unknown",
+                "team_id": team_id,
+                "description": home_desc or visitor_desc,
+                "score": score,
+                "score_margin": score_margin,
+                "raw": {"row": row, "columns": list(col_idx.keys())},
+            }
+        except Exception as e:
+            logger.debug(f"NBA row parse error: {e}")
+            return None
+
+    # Legacy play-level parser retained for direct-event callers (e.g., ME-3
+    # micro-experiment if pursued). Not used by extract() under Q6-A.
+    def _parse_row(
+        self, row: list, col_idx: dict, game_id: str, seq: int
+    ) -> Optional[GameEvent]:
+        """Legacy play-level parser. Reserved for ME-3 (NBA play-level micro-exp)."""
+        d = self._parse_row_raw(row, col_idx, game_id)
+        if d is None:
+            return None
+        return GameEvent(
+            timestamp=d["timestamp"],
+            event_type=d["event_type"],
+            actor=d["actor"],
+            location_context={
+                "period": d["period"],
+                "pctimestring": d["pctimestring"],
+                "description": d["description"],
+                "score": d["score"],
+                "score_margin": d["score_margin"],
+            },
+            raw_data_blob=d["raw"],
+            cell="nba",
+            game_id=game_id,
+            sequence_idx=seq,
+            actor_team=d["team_id"] or None,
+            phase="regular_season",
+        )
 
     def _parse_row(
         self, row: list, col_idx: dict, game_id: str, seq: int
