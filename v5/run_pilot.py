@@ -70,7 +70,7 @@ def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
         pipeline = PipelineClass(config=config)
 
         # Always use mock data in pilot (no real API calls)
-        streams = pipeline.generate_mock_data()
+        streams = pipeline.run(force_mock=True)
         streams_by_cell[cell] = streams
         logger.info(f"  {cell}: {len(streams)} streams, "
                     f"{sum(len(s) for s in streams)} events")

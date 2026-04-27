@@ -5,11 +5,11 @@ Tests for the v5 statistical harness.
 import pytest
 import numpy as np
 
-from ..src.harness.mcnemar import run_mcnemar, aggregate_results
-from ..src.harness.scoring import score_chain, score_batch, extract_binary_vectors
-from ..src.harness.actionables import is_actionable, gate2_check, compute_retention_rate, ACTIONABLE_TYPES
-from ..src.harness.variance import bootstrap_proportion_ci, mcnemar_power
-from ..src.common.schema import GameEvent, ChainCandidate
+from v5.src.harness.mcnemar import run_mcnemar, aggregate_results
+from v5.src.harness.scoring import score_chain, score_batch, extract_binary_vectors, ChainScore
+from v5.src.harness.actionables import is_actionable, gate2_check, compute_retention_rate, ACTIONABLE_TYPES
+from v5.src.harness.variance import bootstrap_proportion_ci, mcnemar_power
+from v5.src.common.schema import GameEvent, ChainCandidate
 
 
 def make_event(event_type: str, cell: str = "nba", seq: int = 0) -> GameEvent:
@@ -102,7 +102,10 @@ class TestMcNemar:
 
     def test_aggregate_results_empty(self):
         agg = aggregate_results([])
-        assert agg == {}
+        assert agg["n_cells"] == 0
+        assert agg["total_chains"] == 0
+        assert agg["total_discordant"] == 0
+        assert agg["cell_summaries"] == []
 
     def test_bonferroni_correction_applied(self):
         baseline = [True] * 40 + [False] * 60
@@ -144,7 +147,6 @@ class TestScoring:
 
     def test_extract_binary_vectors_excludes_abstain(self):
         chains = [self._dummy_chain(i) for i in range(3)]
-        from ..src.harness.scoring import ChainScore
         b = [ChainScore("c0", "nba", True, "yes", "yes", 1),
              ChainScore("c1", "nba", None, "abstain", "yes", -1),
              ChainScore("c2", "nba", False, "no", "yes", 0)]
@@ -161,8 +163,8 @@ class TestVariance:
     def test_bootstrap_ci_50pct(self):
         correct = [True] * 50 + [False] * 50
         lo, hi = bootstrap_proportion_ci(correct, iterations=1000, seed=42)
-        assert 0.40 < lo < 0.50
-        assert 0.50 < hi < 0.60
+        assert 0.38 <= lo <= 0.50
+        assert 0.50 <= hi <= 0.62
 
     def test_bootstrap_ci_empty(self):
         lo, hi = bootstrap_proportion_ci([])

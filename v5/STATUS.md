@@ -66,6 +66,29 @@ All six in-scope infrastructure tasks completed. Pilot validation passes on all 
 
 **Note:** 100% mock retention is expected. MockT only emits windows containing actionable events. Real T retention will be lower — Gate 2's 50% floor is the binding constraint for real data.
 
+### Persisted Artifacts (Mock Data, Local Only)
+
+All 1,200 mock event streams persisted to `v5/data/events/{cell}/*.jsonl` (72MB total):
+- 200 fortnite + 300 nba + 150 csgo + 250 rocket_league + 300 hearthstone = 1,200 files
+
+These are **not committed to git** (see `.gitignore`). They are deterministically regenerable via:
+```bash
+python -m v5.run_pilot
+```
+or programmatically via `pipeline.run(force_mock=True)`. Real-data pipelines will overwrite them when credentials are available.
+
+Pilot report (mock): `v5/RESULTS/pilot_report_mock.json` (also gitignored).
+
+### Test Suite
+
+29/29 tests pass:
+```
+v5/tests/test_harness.py ............... (19 tests)
+v5/tests/test_pilot.py .................. (10 tests)
+```
+
+Run with: `python -m pytest v5/tests/`
+
 ### Documentation
 - `v5/BUILD_PLAN.md` — sequenced build plan with dependency graph (written first, before any code)
 - `v5/SPEC.md` — draft specification with 8 [REQUIRES SIGN-OFF] questions

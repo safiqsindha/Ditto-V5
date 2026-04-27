@@ -4,9 +4,9 @@ Tests for the v5 pilot validation harness and MockT.
 
 import pytest
 
-from ..src.common.schema import EventStream, GameEvent
-from ..src.pilot.mock_t import MockT
-from ..src.pilot.validator import PilotValidator
+from v5.src.common.schema import EventStream, GameEvent
+from v5.src.pilot.mock_t import MockT
+from v5.src.pilot.validator import PilotValidator
 
 
 def _make_stream(cell: str, n_events: int = 50, seed: int = 0) -> EventStream:
@@ -111,7 +111,7 @@ class TestPilotValidator:
         assert isinstance(r.event_type_distribution, dict)
 
     def test_stub_t_raises_noted_not_crashes(self):
-        from ..src.interfaces.translation import FortniteT
+        from v5.src.interfaces.translation import FortniteT
         validator = PilotValidator()
         validator.register_cell("fortnite", FortniteT())
         streams = {"fortnite": self._make_streams("fortnite", n_games=3)}

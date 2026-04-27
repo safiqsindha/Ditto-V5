@@ -59,16 +59,20 @@ class BasePipeline(ABC):
         """Convert structured game records to normalized EventStream objects."""
         ...
 
-    def run(self) -> List[EventStream]:
+    def run(self, force_mock: bool = False) -> List[EventStream]:
         """
         Full pipeline: fetch → parse → extract, with mock fallback.
         Saves event streams to data/events/{cell}/.
+
+        Parameters
+        ----------
+        force_mock : bool
+            If True, skip fetch/parse and use mock data regardless of credentials.
+            Used for pilot validation and infrastructure testing.
         """
-        if self.config.should_use_mock():
-            logger.warning(
-                f"[{self.cell}] Credentials not satisfied ({self.config.env_vars}); "
-                "using mock data."
-            )
+        if force_mock or self.config.should_use_mock():
+            reason = "force_mock=True" if force_mock else f"credentials not satisfied ({self.config.env_vars})"
+            logger.warning(f"[{self.cell}] Using mock data: {reason}")
             streams = self.generate_mock_data()
         else:
             logger.info(f"[{self.cell}] Fetching real data...")
