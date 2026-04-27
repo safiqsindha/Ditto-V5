@@ -34,5 +34,7 @@ jupyter>=1.0.0
 
 # Notes on per-cell external dependencies (not pip-installable):
 # Fortnite: xNocken/replay-downloader (Node.js) + SL-x-TnT/FortniteReplayDecompressor (.NET)
-# Rocket League: rrrocket (Rust binary) OR carball>=2.0 (Python, wraps rrrocket)
+# Rocket League: rrrocket (Rust binary) OR carball (Python wrapper).
+#   If using carball, pin: carball<2.0  (last known-working; see RISK_MITIGATIONS T2)
+#   The pipeline already falls back to rrrocket subprocess if carball is absent.
 # CS:GO: awpy requires Go 1.21+ for demoinfocs-golang (bundled via cgo in awpy wheels)

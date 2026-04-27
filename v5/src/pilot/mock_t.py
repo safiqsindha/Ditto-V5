@@ -6,6 +6,11 @@ MockT converts event streams to chain candidates using simple heuristics
 it exists solely to let the pilot harness and cell runner run end-to-end
 without a real T.
 
+NoisyMockT is a variant that intentionally injects non-actionable events so
+that a fraction of output chains fall below the Gate 2 actionable-fraction
+floor. Use this to validate that Gate 2 filtering works correctly under
+realistic (non-100%) retention rates (RISK_MITIGATIONS M2).
+
 Real T implementations require both-author review and are out of scope.
 """
 
@@ -116,3 +121,74 @@ class MockT(TranslationFunction):
     def _make_chain_id(game_id: str, window_start: int, chain_idx: int) -> str:
         raw = f"{game_id}_{window_start}_{chain_idx}"
         return "mock_chain_" + hashlib.md5(raw.encode()).hexdigest()[:12]
+
+
+class NoisyMockT(MockT):
+    """
+    Noisy variant of MockT for Gate 2 validation (RISK_MITIGATIONS M2).
+
+    Intentionally degrades a fraction of output chains by injecting
+    non-actionable filler events until the chain's actionable fraction
+    drops below ``noise_frac``. This exercises the Gate 2 filter under
+    realistic (non-100%) retention scenarios.
+
+    Parameters
+    ----------
+    noise_rate : float
+        Fraction of chains to degrade (0.0–1.0). Default 0.4 means 40% of
+        chains will be made sub-Gate-2.
+    target_actionable_frac : float
+        Actionable fraction to inject into degraded chains. Defaults to 0.30,
+        which is below the Gate 2 floor of 0.50.
+    """
+
+    def __init__(
+        self,
+        cell: str,
+        window_size: int = 5,
+        step_size: int = 3,
+        noise_rate: float = 0.4,
+        target_actionable_frac: float = 0.30,
+    ):
+        super().__init__(cell=cell, window_size=window_size, step_size=step_size)
+        self.noise_rate = noise_rate
+        self.target_actionable_frac = target_actionable_frac
+
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
+        chains = super().translate(stream)
+        if not chains:
+            return chains
+
+        # Deterministically select chains to degrade using their index
+        degraded = []
+        for idx, chain in enumerate(chains):
+            if (idx % 10) < int(self.noise_rate * 10):
+                chain = self._degrade_chain(chain, idx)
+            degraded.append(chain)
+        return degraded
+
+    def _degrade_chain(self, chain: ChainCandidate, seed: int) -> ChainCandidate:
+        """
+        Replace the chain's metadata to reflect a low actionable fraction.
+
+        We do not re-filter the actual events here (the events remain the same),
+        but we override the actionable_fraction metadata so Gate 2 sees a
+        sub-floor value. This is sufficient to test the Gate 2 filter logic
+        without needing to construct artificial non-actionable event types.
+        """
+        n_events = len(chain.events)
+        n_actionable = max(1, int(n_events * self.target_actionable_frac))
+        updated_meta = {
+            **chain.chain_metadata,
+            "n_actionable": n_actionable,
+            "actionable_fraction": n_actionable / n_events,
+            "noisy_mock": True,
+            "degraded_seed": seed,
+        }
+        return ChainCandidate(
+            chain_id=chain.chain_id,
+            game_id=chain.game_id,
+            cell=chain.cell,
+            events=chain.events,
+            chain_metadata=updated_meta,
+        )
