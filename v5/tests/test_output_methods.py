@@ -341,3 +341,90 @@ class TestInterimCheck:
 
         code = main(["--results", str(tmp_path / "nonexistent.json")])
         assert code == 1
+
+
+# ---------------------------------------------------------------------------
+# ME-RL-1: RocketLeaguePlayerT per-player chain variant
+# ---------------------------------------------------------------------------
+
+class TestRocketLeaguePlayerT:
+    """ME-RL-1: per-player chains within each Rocket League play."""
+
+    def _rl_stream(self, n_goals: int = 3, events_per_play: int = 18,
+                   n_actors: int = 3, game_id: str = "rl_me_rl1") -> EventStream:
+        from v5.src.common.schema import EventStream, GameEvent
+        stream = EventStream(game_id=game_id, cell="rocket_league")
+        idx = 0
+        actors = [f"blue_{i}" for i in range(n_actors)]
+        for play in range(n_goals + 1):
+            for j in range(events_per_play):
+                etype = "objective_capture" if (j == events_per_play - 1 and play < n_goals) \
+                    else "engage_decision"
+                stream.append(GameEvent(
+                    timestamp=float(idx),
+                    event_type=etype,
+                    actor=actors[j % n_actors],
+                    location_context={},
+                    raw_data_blob={},
+                    cell="rocket_league",
+                    game_id=game_id,
+                    sequence_idx=idx,
+                ))
+                idx += 1
+        return stream
+
+    def test_produces_more_chains_than_play_level(self):
+        from v5.src.interfaces.translation import RocketLeaguePlayerT, RocketLeagueT
+        stream = self._rl_stream(n_goals=3, events_per_play=18, n_actors=3)
+        play_chains = RocketLeagueT().translate(stream)
+        player_chains = RocketLeaguePlayerT().translate(stream)
+        # Per-player produces n_actors chains per play (where actors all appear)
+        assert len(player_chains) >= len(play_chains)
+
+    def test_each_chain_has_single_actor(self):
+        from v5.src.interfaces.translation import RocketLeaguePlayerT
+        stream = self._rl_stream(n_goals=2, events_per_play=12, n_actors=3)
+        chains = RocketLeaguePlayerT().translate(stream)
+        for chain in chains:
+            actors_in_chain = {e.actor for e in chain.events}
+            assert len(actors_in_chain) == 1, \
+                f"Per-player chain {chain.chain_id} has multiple actors: {actors_in_chain}"
+
+    def test_chain_ids_unique(self):
+        from v5.src.interfaces.translation import RocketLeaguePlayerT
+        stream = self._rl_stream(n_goals=3, events_per_play=12, n_actors=3)
+        chains = RocketLeaguePlayerT().translate(stream)
+        ids = [c.chain_id for c in chains]
+        assert len(ids) == len(set(ids)), "Duplicate per-player chain IDs"
+
+    def test_metadata_tagged_with_me_rl1(self):
+        from v5.src.interfaces.translation import RocketLeaguePlayerT
+        stream = self._rl_stream(n_goals=1, events_per_play=12, n_actors=2)
+        chains = RocketLeaguePlayerT().translate(stream)
+        assert chains, "Should produce at least one chain"
+        for chain in chains:
+            assert chain.chain_metadata.get("me") == "ME-RL-1"
+            assert chain.chain_metadata.get("chain_type") == "per_player_play"
+            assert "actor_slot" in chain.chain_metadata
+
+    def test_cell_is_rocket_league(self):
+        from v5.src.interfaces.translation import RocketLeaguePlayerT
+        t = RocketLeaguePlayerT()
+        assert t.cell == "rocket_league"
+
+    def test_empty_stream_returns_empty(self):
+        from v5.src.common.schema import EventStream
+        from v5.src.interfaces.translation import RocketLeaguePlayerT
+        stream = EventStream(game_id="empty", cell="rocket_league")
+        assert RocketLeaguePlayerT().translate(stream) == []
+
+    def test_me_rl1_registry_uses_player_t(self):
+        from v5.src.interfaces.translation import (
+            DOMAIN_T_ME_RL1,
+            RocketLeaguePlayerT,
+        )
+        assert isinstance(DOMAIN_T_ME_RL1["rocket_league"], RocketLeaguePlayerT)
+        # Other cells unchanged
+        from v5.src.interfaces.translation import DOMAIN_T_STUBS
+        for cell in ["fortnite", "nba", "csgo", "hearthstone"]:
+            assert type(DOMAIN_T_ME_RL1[cell]) is type(DOMAIN_T_STUBS[cell])

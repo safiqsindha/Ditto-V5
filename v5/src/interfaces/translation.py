@@ -315,6 +315,82 @@ class RocketLeagueT(TranslationFunction):
 
 
 # ---------------------------------------------------------------------------
+# Rocket League per-player T  — ME-RL-1 (pre-registered micro-experiment)
+# Within each play, one ChainCandidate per unique actor.
+# ---------------------------------------------------------------------------
+
+class RocketLeaguePlayerT(TranslationFunction):
+    """
+    ME-RL-1: per-player chains within each Rocket League play.
+
+    Identical play-boundary logic to RocketLeagueT (objective_capture events
+    delimit plays), but within each play the events are partitioned by actor
+    so each player's actions become a separate ChainCandidate.
+
+    This lets us test whether the boost-economy constraint (R-1) is detectable
+    at the individual-player level rather than the whole-team level. A player
+    who picks up boost and immediately expends it without rotating back is
+    individually violating the soft rotation constraint even if teammates
+    cover — per-player chains surface this.
+
+    Chain ID: {game_id}__rl_pp_{play}_{actor_slot} where actor_slot is a
+    zero-based index into the sorted set of actors in that play (CF-4=B safe;
+    no real names in the ID).
+
+    ChainBuilder trims to N=12 (R-3).
+    """
+
+    @property
+    def cell(self) -> str:
+        return "rocket_league"
+
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
+        events = stream.events
+        if not events:
+            return []
+
+        goal_indices = [
+            i for i, e in enumerate(events)
+            if e.event_type == "objective_capture"
+        ]
+        boundaries = [0] + [gi + 1 for gi in goal_indices] + [len(events)]
+
+        chains: list[ChainCandidate] = []
+        for play_num, (start, end) in enumerate(zip(boundaries, boundaries[1:], strict=False)):
+            play_events = events[start:end]
+            if len(play_events) < 2:
+                continue
+
+            # Split by actor (deterministic order: sorted actor set for stable IDs)
+            by_actor: dict[str, list[GameEvent]] = {}
+            for ev in play_events:
+                by_actor.setdefault(ev.actor, []).append(ev)
+
+            for actor_slot, actor in enumerate(sorted(by_actor)):
+                actor_events = by_actor[actor]
+                if len(actor_events) < 2:
+                    continue
+                chains.append(ChainCandidate(
+                    chain_id=self._chain_id(
+                        stream.game_id, f"rl_pp_{play_num}_{actor_slot}"
+                    ),
+                    game_id=stream.game_id,
+                    cell="rocket_league",
+                    events=actor_events,
+                    chain_metadata={
+                        "chain_type": "per_player_play",
+                        "play": play_num,
+                        "actor_slot": actor_slot,
+                        "n_events": len(actor_events),
+                        "ends_in_goal": play_num < len(goal_indices),
+                        "me": "ME-RL-1",
+                    },
+                ))
+
+        return chains
+
+
+# ---------------------------------------------------------------------------
 # Hearthstone T
 # Phase B decisions: H-1 mana-cost + turn-alternation + board-state,
 #   H-2 all actions within one player's turn, H-3 N=6
@@ -385,4 +461,11 @@ DOMAIN_T_STUBS: dict[str, TranslationFunction] = {
     "csgo": CSGOT(),
     "rocket_league": RocketLeagueT(),
     "hearthstone": HearthstoneT(),
+}
+
+# ME-RL-1 variant registry — per-player RL chains (micro-experiment).
+# Use in place of DOMAIN_T_STUBS["rocket_league"] to run the ME-RL-1 comparison.
+DOMAIN_T_ME_RL1: dict[str, TranslationFunction] = {
+    **DOMAIN_T_STUBS,
+    "rocket_league": RocketLeaguePlayerT(),
 }

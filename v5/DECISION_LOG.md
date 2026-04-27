@@ -619,3 +619,17 @@ Pilot run confirmed 7,740–18,420 chains per cell (all well above 1,200 target)
 **Decision:** Flag Fortnite and RL as priority cells for v6 T-design refinement. Both cells have multi-dimensional constraint structure (spatial + resource for RL, spatial + elimination + temporal for Fortnite) that a single T may compress too aggressively.
 
 **Follow-up:** ME-FN-1 (build-cost constraint variant), ME-RL-1 (per-player chains), and ME-RL-2 (possession-level vs play-level) are pre-registered for v6 consideration.
+
+---
+
+## Decision D-34: CF-4=B actor anonymisation in prompt rendering
+
+**Date:** 2026-04-27 (bug sweep post Phase B)
+
+**Context:** Bug sweep Layer 2 found that `PromptBuilder.format_event()` was emitting the raw `actor` field (e.g. `"LeBron_James"`, `"player_12345"`) verbatim in both baseline and intervention prompts. CF-4=B ("domain-only provenance") requires that no player or team identity appear in the prompt — the model must reason from constraint rules alone, not from domain knowledge about specific athletes.
+
+**Decision:** Anonymise actors to chain-local positional slots: first actor seen in the chain becomes `Player_0`, second becomes `Player_1`, etc. The mapping is per-chain (not per-game) so different chains do not share slot assignments.
+
+**Implementation:** `PromptBuilder.format_chain()` builds the `actor_map` dict and passes it to `format_event(actor_map=...)`. A module-level `_build_actor_map()` helper keeps the logic reusable. Location context (x/y coordinates, round numbers, period numbers) is retained — those are structural game state, not player identity.
+
+**Code impact:** `v5/src/harness/prompts.py` — `format_chain`, `format_event`, `_build_actor_map` updated. Two tests added to `test_prompts.py` verifying absence of real names and presence of anonymised slots.
