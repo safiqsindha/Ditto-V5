@@ -14,6 +14,7 @@ method is a stub that requires a real ModelEvaluator to be injected.
 
 from __future__ import annotations
 
+import datetime
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from ..common.config import HarnessConfig, load_harness_config
 from ..common.schema import ChainCandidate, EventStream
+from ..interfaces.chain_builder import ChainBuilder
 from ..interfaces.translation import TranslationFunction
 from .actionables import compute_retention_rate
 from .mcnemar import McnemarResult, aggregate_results, run_mcnemar
@@ -88,12 +90,21 @@ class CellRunner:
     report = runner.run(event_streams_by_cell)
     """
 
-    def __init__(self, config: HarnessConfig | None = None):
+    def __init__(
+        self,
+        config: HarnessConfig | None = None,
+        chain_builder: ChainBuilder | None = None,
+    ):
         self.config = config or load_harness_config()
+        self.chain_builder = chain_builder
         self._cell_translations: dict[str, TranslationFunction] = {}
 
     def register_cell(self, cell: str, translation_fn: TranslationFunction) -> None:
         self._cell_translations[cell] = translation_fn
+
+    def set_chain_builder(self, chain_builder: ChainBuilder) -> None:
+        """Wire a ChainBuilder so T-output candidates flow through chain construction."""
+        self.chain_builder = chain_builder
 
     def run(
         self,
@@ -115,9 +126,8 @@ class CellRunner:
         When baseline/intervention/ground_truth are None, scoring is skipped
         (useful for infrastructure validation without real model calls).
         """
-        import datetime
         run_id = f"v5_run_{int(time.time())}"
-        ts = datetime.datetime.utcnow().isoformat() + "Z"
+        ts = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         cell_results = []
         mcnemar_results = []
@@ -145,10 +155,21 @@ class CellRunner:
 
         agg = aggregate_results(mcnemar_results) if mcnemar_results else {}
 
+        # Capture full config including ChainBuilder per-cell lengths (A2 fix)
+        full_config = asdict(self.config)
+        if self.chain_builder is not None:
+            full_config["chain_builder"] = {
+                "class": type(self.chain_builder).__name__,
+                "per_cell_chain_length": getattr(
+                    self.chain_builder, "per_cell_chain_length", {}
+                ),
+                "overlap": getattr(self.chain_builder, "overlap", None),
+            }
+
         return RunReport(
             run_id=run_id,
             timestamp=ts,
-            config=asdict(self.config),
+            config=full_config,
             cells=cell_results,
             aggregate=agg,
         )
@@ -166,17 +187,29 @@ class CellRunner:
         n_events = sum(len(s) for s in streams)
 
         # Step 1: Translate event streams to chain candidates via T
-        chains: list[ChainCandidate] = []
+        candidates: list[ChainCandidate] = []
         if translation_fn is None:
             errors.append(f"No TranslationFunction registered for cell '{cell}'")
         else:
             try:
                 for stream in streams:
-                    chains.extend(translation_fn.translate(stream))
+                    candidates.extend(translation_fn.translate(stream))
             except NotImplementedError:
                 errors.append(f"T not implemented for cell '{cell}' (stub)")
             except Exception as e:
                 errors.append(f"T raised exception for cell '{cell}': {e}")
+
+        # Step 1b: ChainBuilder enforces per-cell chain length (Q4-B) — A1 fix
+        if self.chain_builder is not None and candidates:
+            try:
+                chains: list[ChainCandidate] = self.chain_builder.build_from_candidates(
+                    candidates, cell=cell
+                )
+            except (ValueError, TypeError) as e:
+                errors.append(f"ChainBuilder error for cell '{cell}': {e}")
+                chains = candidates  # fall through with raw candidates
+        else:
+            chains = candidates
 
         n_pre_gate2 = len(chains)
 

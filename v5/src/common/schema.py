@@ -97,9 +97,23 @@ class EventStream:
 
     @classmethod
     def from_jsonl(cls, path: Path) -> EventStream:
+        """
+        Load EventStream from JSONL. F6 fix: validate header marker.
+        First line must have '_type': 'header' for forward-compatibility.
+        """
         with open(path) as f:
             lines = f.readlines()
-        header = json.loads(lines[0])
+        if not lines:
+            raise ValueError(f"Empty JSONL file: {path}")
+        try:
+            header = json.loads(lines[0])
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Malformed header in {path}: {e}") from e
+        if header.get("_type") != "header":
+            raise ValueError(
+                f"Missing or invalid header marker in {path}; expected '_type': 'header'. "
+                "File may be from an older version or corrupted."
+            )
         stream = cls(game_id=header["game_id"], cell=header["cell"],
                      metadata=header.get("metadata", {}))
         for line in lines[1:]:

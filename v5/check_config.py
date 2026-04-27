@@ -99,6 +99,9 @@ def main():
     parser = argparse.ArgumentParser(description="v5 config sanity check")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors")
     parser.add_argument("--cell", help="Report only one cell")
+    parser.add_argument("--strict", action="store_true",
+                        help="Exit nonzero if any cell would use mock fallback (yellow). "
+                             "Useful for CI gating real-data acquisition. (I4 fix)")
     args = parser.parse_args()
 
     color_output = not args.no_color and sys.stdout.isatty()
@@ -126,12 +129,21 @@ def main():
     print(f"{BOLD}Overall:{RESET} {color}{summary}{RESET}")
     print()
 
-    # Exit code 0 if all green or yellow (mock fallback OK), 2 if red
+    # Exit code 0 if all green (or yellow when not strict), 2 if any red
     n_red = sum(
         1 for c in cell_configs.values()
         if not c.env_satisfied() and not c.mock_fallback
     )
-    sys.exit(0 if n_red == 0 else 2)
+    n_yellow = sum(
+        1 for c in cell_configs.values()
+        if not c.env_satisfied() and c.mock_fallback
+    )
+    if n_red:
+        sys.exit(2)
+    if args.strict and n_yellow:
+        print(f"--strict: {n_yellow} cell(s) would use mock fallback; exiting nonzero")
+        sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

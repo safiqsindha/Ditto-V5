@@ -1,8 +1,10 @@
 # v5: Five-Cell Parallel Detection Experiment
 
+[![v5 tests](https://github.com/safiqsindha/Ditto-V5/actions/workflows/v5-tests.yml/badge.svg)](https://github.com/safiqsindha/Ditto-V5/actions/workflows/v5-tests.yml)
+
 Five-cell parallel replication of v3's constraint-chain detection methodology across new game domains. Subject model: Claude Haiku.
 
-**Status:** Infrastructure complete, awaiting SPEC pre-registration sign-off.  
+**Status:** SPEC v1.0 signed (both authors, 2026-04-27). Phase A complete (autonomous infrastructure work). Phase B (T design, joint authoring) pending.  
 **Reference experiments:** v3 (Chess/Checkers), v4 (single-cell methodology characterization).
 
 ---

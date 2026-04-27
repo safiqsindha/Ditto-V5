@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..common.schema import ChainCandidate
+from .prompts import parse_model_response
 
 
 @dataclass
@@ -37,10 +38,12 @@ def score_chain(
     Correctness is determined by exact match after normalization (lower, strip).
     A response of "abstain", empty string, or unparseable → abstain (-1).
     """
-    response_norm = model_response.strip().lower()
+    # F8 fix: route through parse_model_response for richer abstain detection
+    # (handles "I don't know", JSON-wrapped answers, etc.)
+    response_norm = parse_model_response(model_response)
     truth_norm = ground_truth.strip().lower()
 
-    if not response_norm or response_norm in {"abstain", "n/a", "unknown", "?"}:
+    if not response_norm:
         label = -1
         correct = None
     elif response_norm == truth_norm:

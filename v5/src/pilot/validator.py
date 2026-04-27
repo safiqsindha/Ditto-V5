@@ -211,10 +211,11 @@ class PilotValidator:
         chains_passed = [c for c in chains if c.is_actionable]
         n_passed = len(chains_passed)
 
-        if n_passed < 100:
+        # F11 fix: SPEC Q3 locked target is 1,200 chains/cell
+        if n_passed < 1200:
             warnings.append(
-                f"Only {n_passed} chains post-Gate2; target is ~1200. "
-                "Check pipeline sample size or event extraction."
+                f"Only {n_passed} chains post-Gate2; SPEC Q3 target is 1,200/cell. "
+                "Per Q3 contingency, scale upstream acquisition to maintain 1,200 post-filter."
             )
         if gate2_info["retention_rate"] < self.gate2_floor:
             warnings.append(

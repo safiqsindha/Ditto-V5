@@ -56,7 +56,7 @@ class BasePipeline(ABC):
         """Convert structured game records to normalized EventStream objects."""
         ...
 
-    def run(self, force_mock: bool = False) -> list[EventStream]:
+    def run(self, force_mock: bool = False, clear_existing: bool = True) -> list[EventStream]:
         """
         Full pipeline: fetch → parse → extract, with mock fallback.
         Saves event streams to data/events/{cell}/.
@@ -66,6 +66,10 @@ class BasePipeline(ABC):
         force_mock : bool
             If True, skip fetch/parse and use mock data regardless of credentials.
             Used for pilot validation and infrastructure testing.
+        clear_existing : bool
+            If True (default), clear existing .jsonl files in data/events/{cell}/
+            before saving new streams. Prevents stale data from previous runs
+            mixing with new output (I3 fix).
         """
         if force_mock or self.config.should_use_mock():
             reason = "force_mock=True" if force_mock else f"credentials not satisfied ({self.config.env_vars})"
@@ -79,10 +83,26 @@ class BasePipeline(ABC):
             logger.info(f"[{self.cell}] Extracting events from {len(records)} records...")
             streams = self.extract_events(records)
 
+        # A3 fix: warn if real-fetch path produced empty streams
+        if not streams and not force_mock and not self.config.should_use_mock():
+            logger.warning(
+                f"[{self.cell}] Real fetch+parse produced 0 streams. "
+                "Check credentials, network, and parser logs. "
+                "No fallback to mock; returning empty list."
+            )
+
+        if clear_existing and streams:
+            self._clear_events_dir()
+
         logger.info(f"[{self.cell}] Saving {len(streams)} event streams...")
         self._save_streams(streams)
         self._print_summary(streams)
         return streams
+
+    def _clear_events_dir(self) -> None:
+        """Remove existing .jsonl files in events_dir (I3 fix)."""
+        for path in self.events_dir.glob("*.jsonl"):
+            path.unlink()
 
     @abstractmethod
     def generate_mock_data(self) -> list[EventStream]:

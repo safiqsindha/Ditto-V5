@@ -110,7 +110,62 @@ class FixedPerCellChainBuilder(ChainBuilder):
         if max_chains is None or len(all_chains) <= max_chains:
             return all_chains
 
-        # Uniform subsample across the full chain list
+        return _uniform_subsample(all_chains, max_chains)
+
+    def build_from_candidates(
+        self,
+        candidates: list[ChainCandidate],
+        cell: str,
+        max_chains: int | None = None,
+    ) -> list[ChainCandidate]:
+        """
+        Build fixed-length chains from T-output ChainCandidates (variable length).
+
+        For each candidate longer than the per-cell N, slide a non-overlapping
+        window of size N over its events and emit one chain per window.
+        Candidates shorter than N are dropped (with a warning).
+
+        Per Q4-B sign-off — used when T produces variable-length candidates that
+        need to be normalized to per-cell N before Gate 2 + scoring.
+        """
+        chain_length = self.get_chain_length(cell)
+        all_chains: list[ChainCandidate] = []
+
+        for cand in candidates:
+            if cand.cell != cell:
+                logger.warning(
+                    f"Candidate {cand.chain_id} cell={cand.cell} != requested {cell}; skipping"
+                )
+                continue
+            if len(cand.events) < chain_length:
+                logger.debug(
+                    f"Candidate {cand.chain_id} too short ({len(cand.events)} < {chain_length}); dropped"
+                )
+                continue
+
+            step = chain_length if not self.overlap else 1
+            n_subchains = 0
+            for i in range(0, len(cand.events) - chain_length + 1, step):
+                window = cand.events[i:i + chain_length]
+                sub_id = f"{cand.chain_id}_sub{n_subchains:03d}"
+                all_chains.append(ChainCandidate(
+                    chain_id=sub_id,
+                    game_id=cand.game_id,
+                    cell=cell,
+                    events=window,
+                    chain_metadata={
+                        **cand.chain_metadata,
+                        "parent_chain_id": cand.chain_id,
+                        "chain_length": chain_length,
+                        "subwindow_start": i,
+                        "overlap": self.overlap,
+                        "builder": "FixedPerCellChainBuilder",
+                    },
+                ))
+                n_subchains += 1
+
+        if max_chains is None or len(all_chains) <= max_chains:
+            return all_chains
         return _uniform_subsample(all_chains, max_chains)
 
     def _build_one_stream(

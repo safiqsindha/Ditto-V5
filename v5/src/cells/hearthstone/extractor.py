@@ -61,7 +61,7 @@ class HearthstoneExtractor:
         try:
             self._walk_game_tree(game_tree, stream)
         except Exception as e:
-            logger.warning(f"HS tree walk error for {game_id}: {e}")
+            logger.warning(f"HS tree walk error for {game_id}: {e}", exc_info=True)
 
         return stream
 
