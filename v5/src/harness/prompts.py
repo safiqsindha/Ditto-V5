@@ -95,17 +95,25 @@ class PromptBuilder:
     # --- Per-cell hooks (override in subclasses) ----------------------------
     def format_chain(self, chain: ChainCandidate) -> str:
         """Default: render each event on its own line. Subclasses can prettify."""
+        actor_map = _build_actor_map(chain.events)
         lines = []
         for i, ev in enumerate(chain.events):
-            lines.append(self.format_event(ev, i))
+            lines.append(self.format_event(ev, i, actor_map=actor_map))
         return "\n".join(lines)
 
-    def format_event(self, event: GameEvent, idx: int) -> str:
-        """Default: 'idx | t=TIME | TYPE by ACTOR (context_summary)'."""
+    def format_event(self, event: GameEvent, idx: int, actor_map: dict | None = None) -> str:
+        """
+        Default: 'idx | t=TIME | TYPE by Player_N (context_summary)'.
+
+        CF-4=B: actor is anonymised to 'Player_N' using the chain-local actor_map
+        built in format_chain(). This prevents player/team identity leaking into
+        prompts and ensures the model reasons from constraint rules alone.
+        """
+        anon = actor_map.get(event.actor, "Player_?") if actor_map else "Player_?"
         ctx_summary = self._summarize_context(event.location_context)
         return (
             f"{idx:>3}. t={event.timestamp:>7.1f}s | "
-            f"{event.event_type:<22} | actor={event.actor:<24} "
+            f"{event.event_type:<22} | actor={anon:<12} "
             f"| {ctx_summary}"
         )
 
@@ -147,6 +155,21 @@ def _short(v) -> str:
         return f"{v:.2f}"
     s = str(v)
     return s if len(s) <= 32 else s[:29] + "..."
+
+
+def _build_actor_map(events: list) -> dict[str, str]:
+    """
+    CF-4=B anonymisation: map each unique actor ID to a stable 'Player_N' slot.
+
+    Order is first-appearance within the chain, ensuring the same actor always
+    gets the same slot across all events in the chain. The mapping is chain-local
+    so different chains do not share slot assignments.
+    """
+    seen: dict[str, str] = {}
+    for ev in events:
+        if ev.actor not in seen:
+            seen[ev.actor] = f"Player_{len(seen)}"
+    return seen
 
 
 # ---------------------------------------------------------------------------

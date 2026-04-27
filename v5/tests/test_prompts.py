@@ -63,12 +63,26 @@ class TestPromptBuilder:
         with pytest.raises(ValueError, match="cell"):
             NBAPromptBuilder().build(chain)
 
-    def test_event_format_includes_type_and_actor(self):
+    def test_event_format_includes_type_and_anonymised_actor(self):
         chain = _chain("nba")
         builder = NBAPromptBuilder()
-        line = builder.format_event(chain.events[0], 0)
+        from v5.src.harness.prompts import _build_actor_map
+        actor_map = _build_actor_map(chain.events)
+        line = builder.format_event(chain.events[0], 0, actor_map=actor_map)
         assert "engage_decision" in line
-        assert "player_0" in line
+        # CF-4=B: real actor name must NOT appear; anonymised slot must
+        assert "player_0" not in line
+        assert "Player_0" in line
+
+    def test_format_chain_anonymises_actors(self):
+        chain = _chain("nba", n=5)
+        builder = NBAPromptBuilder()
+        rendered = builder.format_chain(chain)
+        # Real actor names must not appear in the rendered chain
+        for i in range(5):
+            assert f"player_{i}" not in rendered
+        # Anonymised slots must appear
+        assert "Player_0" in rendered
 
 
 class TestPerCellBuilders:
