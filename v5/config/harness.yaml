@@ -10,7 +10,7 @@ harness:
     alpha: 0.05
     continuity_correction: true
     two_sided: true
-    bonferroni_divisor: 5  # [REQUIRES SIGN-OFF]: 5 (per-cell) vs 1 (aggregate only)
+    bonferroni_divisor: 5  # LOCKED via SPEC Q2 — five per-cell tests at α_corrected = 0.01
     min_discordant_pairs: 10
 
   scoring:
@@ -32,10 +32,16 @@ harness:
     effect_size: true  # Cohen's h for proportions
     power_post_hoc: true
 
-  chain_length:  # [REQUIRES SIGN-OFF]: fixed vs variable; if fixed, what length?
-    mode: "TBD"
-    # Candidate options: fixed_5, fixed_10, variable_3_to_15
-    # Decision cannot be made until T design is reviewed
+  chain_length:  # Q4 LOCKED: fixed per cell. Per-cell N values TBD at T-design time.
+    mode: "fixed_per_cell"
+    per_cell:
+      fortnite: null      # to be locked at T-design (joint authoring session)
+      nba: null
+      csgo: null
+      rocket_league: null
+      hearthstone: null
+    overlap: false        # non-overlapping (sliding window with step = chain_length)
+    sampling: "sequential" # within-game sequential; uniform subsample to hit n_chains target
 
 actionables:
   version: "1.1"

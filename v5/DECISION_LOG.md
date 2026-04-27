@@ -328,3 +328,145 @@ Pilot run confirmed 7,740–18,420 chains per cell (all well above 1,200 target)
 **Needs review before SPEC sign-off:** No — this is a tooling and operational-security decision, not a methodological one. The user's Node.js queue snippet, when provided, will be added to `v5/src/cells/fortnite/fetch_queue.js` and invoked from `pipeline.fetch()` via `subprocess.run(["node", "fetch_queue.js", ...])`.
 
 **Pending dependency:** Awaiting user-provided Node.js async queue snippet.
+
+---
+
+## Decision D-16: SPEC Q1 Sign-Off — Two-Call Prompt Structure
+
+**Context:** SPEC sign-off round 1 (2026-04-27). Q1 asked: same API call vs two separate calls for baseline/intervention.
+
+**Question:** How should baseline and intervention be presented to the subject model?
+
+**Default chosen:** (B) Two separate API calls per chain.
+
+**Reasoning:** User-confirmed. Eliminates within-prompt contamination risk where the model's response to one condition could leak into how it answers the other when both share a context window. Costs 2× per chain but the experiment is small enough (~$4 Phase 1) that the cost premium is negligible.
+
+**Alternatives considered:** (A) Same call with constraint segment as a flag — cheaper but contamination risk; rejected.
+
+**Reversibility:** Easy — single parameter in evaluation harness.
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-17: SPEC Q2 Sign-Off — Bonferroni Divisor = 5
+
+**Context:** SPEC sign-off round 1.
+
+**Question:** Multiple-comparisons correction across the five cells.
+
+**Default chosen:** (A) Divisor = 5; α_corrected = 0.01 per cell.
+
+**Reasoning:** User-confirmed. The actual research question is whether the v3 methodology generalizes — which requires per-cell verdicts, not a single global aggregate. Conservative but correct. Aligned with v3's approach (v3 used divisor = 4 for its 4 cells).
+
+**Alternatives considered:** (B) divisor=1 treats v5 as one global test, loses cell-level resolution; (C) mixed adds interpretive complexity for marginal benefit.
+
+**Reversibility:** Easy — single config value.
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-18: SPEC Q3 Sign-Off — n = 1,200 chains/cell
+
+**Context:** SPEC sign-off round 1. v3 effect-size review via WebFetch on public v3 SPEC and SESSION_LOG.
+
+**Question:** Is n=1,200 per cell sufficient given v3's anticipated effect size?
+
+**Default chosen:** Lock at n=1,200/cell with contingency: if real-data Gate 2 retention < 50%, scale upstream acquisition to maintain 1,200 post-filter.
+
+**Reasoning:** v3 designed at the same scale (1,200 real chains pre-filter, 1,000 post-filter) calibrated to 90% power at gap=0.06 with α=0.0125. v5's Bonferroni=5 vs v3's =4 reduces α from 0.0125 to 0.01 — minor power loss (~3-5pp). v3 has not yet run Phase 2, so observed effect size is unknown; v5 inherits v3's design intent.
+
+**Alternatives considered:**
+- Bump to 1,500 for headroom against tighter Bonferroni: defensible but costs ~25% more API; not necessary unless results come in null.
+- Bump to 2,500: only justified if v3 had observed gap < 0.05, which it hasn't.
+
+**Reversibility:** Easy in code (config integer); harder in practice (would need additional acquisition).
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-19: SPEC Q4 Sign-Off — Fixed Chain Length Per Cell
+
+**Context:** SPEC sign-off round 1.
+
+**Question:** Chain length: fixed global, fixed per cell, or variable bounded.
+
+**Default chosen:** (B) Fixed length per cell, varying across cells. Per-cell N values to be locked at T-design time (joint authoring session). Variant (C) variable-bounded flagged as a post-hoc micro-experiment ME-1.
+
+**Reasoning:** User-confirmed. Domain decision granularities differ substantially (CS round vs HS turn vs NBA possession) and forcing one global N would either fragment some cells' decisions or merge multiple decisions into one chain unnaturally. Per-cell N respects domain structure while still preserving McNemar's per-cell validity (the test doesn't require equal n across cells).
+
+**Alternatives considered:** (A) Fixed global treats domains as identical when they aren't; (C) variable bounded gives most flexibility but interpretation harder. (C) preserved as ME-1 micro-experiment for after primary run.
+
+**Reversibility:** Moderate — changing N per cell requires regenerating chains.
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-20: SPEC Q5 Sign-Off — CS:GO Round-Level Granularity
+
+**Context:** SPEC sign-off round 1.
+
+**Question:** CS:GO event granularity.
+
+**Default chosen:** (A) Round-level (~300 events/map). (C) tick-sampled flagged as micro-experiment ME-2.
+
+**Reasoning:** User-confirmed. Rounds are the natural decision boundary in CS — each round is one buy decision, one execute, one retake. Tick-sampled gives more events but mostly captures non-decision frames. Round-level matches existing extractor; no code change needed.
+
+**Reversibility:** Moderate.
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-21: SPEC Q6 Sign-Off — NBA Possession-Level Granularity
+
+**Context:** SPEC sign-off round 1.
+
+**Question:** NBA event granularity.
+
+**Default chosen:** (A) Possession-level (~85 possessions/game). (B) play-level flagged as micro-experiment ME-3.
+
+**Reasoning:** User-confirmed. Possession is the natural NBA decision unit — one offensive trip + one defensive set. Play-level fragments possessions across multiple events.
+
+**Code impact:** REQUIRES update to `nba/extractor.py` — current default emits one event per PBP row (play-level). New behavior: group plays into possessions using shot-clock and possession-change boundaries; emit one event per possession with possession metadata.
+
+**Reversibility:** Moderate — extractor change, fully backwards-compatible since events still satisfy the GameEvent schema.
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-22: SPEC Q7 Sign-Off — RL Boost-Enriched Hit-Level
+
+**Context:** SPEC sign-off round 1.
+
+**Question:** Rocket League event granularity / state handling.
+
+**Default chosen:** (C) Boost-enriched hit-level — interleaves ball-contact events with boost-economy events (pickups, low-boost decisions).
+
+**Reasoning:** User-confirmed. Boost economy is approximately half the decision space in RL; ignoring it (option A hit-only) loses critical decision context. Possession-level (option B) is too coarse for hit-by-hit decisions.
+
+**Code impact:** REQUIRES update to `rocket_league/extractor.py`. Current implementation extracts hits + boost events separately; needs to merge them into one chronologically-sorted stream with consistent event_type normalization. Already partially done — boost events are extracted but as a separate pass; the new requirement is integrating them as first-class events in the same stream with appropriate event_type tags (resource_gain for pickup, resource_spend for use, resource_budget for low-boost decisions).
+
+**Reversibility:** Moderate — extractor change.
+
+**Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-23: SPEC Q8 Sign-Off — Hearthstone Per-Action Granularity
+
+**Context:** SPEC sign-off round 1.
+
+**Question:** Hearthstone event granularity.
+
+**Default chosen:** (A) Per-action (~80 events/game). Each card play, attack, hero power, battlecry trigger = one event.
+
+**Reasoning:** User-confirmed. Per-action preserves intra-turn decision sequencing (combo plays, trade-then-play, removal sequencing). Per-turn (option B) collapses these into single-event blobs and loses the actual decision structure. Matches existing extractor; no code change needed.
+
+**Reversibility:** Easy.
+
+**Needs review before SPEC sign-off:** Done — locked.

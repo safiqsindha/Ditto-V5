@@ -1,7 +1,16 @@
 """
 NBA event extractor.
 
-Converts PlayByPlayV3 API response to normalized GameEvent stream.
+Per SPEC Q6 sign-off (D-21): groups play-by-play rows into possession-level
+events. Each possession contains one or more plays, with one summary GameEvent
+emitted per possession boundary.
+
+Possession boundaries are detected via:
+  - Made shot (ends offensive possession)
+  - Defensive rebound (ends offensive possession, starts new one for other team)
+  - Turnover (ends offensive possession)
+  - End of period (ends current possession)
+  - Free throw resulting in possession change (e.g., final FT made + no foul)
 
 PlayByPlayV3 response structure:
   resultSets[0].rowSet: list of play rows
