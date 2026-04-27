@@ -9,12 +9,9 @@ Each domain pipeline subclasses BasePipeline and implements:
 
 from __future__ import annotations
 
-import json
 import logging
-import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 from ..common.config import CellConfig
 from ..common.schema import EventStream, GameEvent
@@ -45,21 +42,21 @@ class BasePipeline(ABC):
             d.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
-    def fetch(self) -> List[Path]:
+    def fetch(self) -> list[Path]:
         """Download raw data files. Returns list of paths to downloaded files."""
         ...
 
     @abstractmethod
-    def parse(self, raw_paths: List[Path]) -> List[dict]:
+    def parse(self, raw_paths: list[Path]) -> list[dict]:
         """Parse raw files into structured game records."""
         ...
 
     @abstractmethod
-    def extract_events(self, game_records: List[dict]) -> List[EventStream]:
+    def extract_events(self, game_records: list[dict]) -> list[EventStream]:
         """Convert structured game records to normalized EventStream objects."""
         ...
 
-    def run(self, force_mock: bool = False) -> List[EventStream]:
+    def run(self, force_mock: bool = False) -> list[EventStream]:
         """
         Full pipeline: fetch → parse → extract, with mock fallback.
         Saves event streams to data/events/{cell}/.
@@ -88,7 +85,7 @@ class BasePipeline(ABC):
         return streams
 
     @abstractmethod
-    def generate_mock_data(self) -> List[EventStream]:
+    def generate_mock_data(self) -> list[EventStream]:
         """
         Generate a deterministic synthetic dataset for testing.
         Must return enough streams to support ~1200 chains after filtering.
@@ -97,12 +94,12 @@ class BasePipeline(ABC):
         """
         ...
 
-    def _save_streams(self, streams: List[EventStream]) -> None:
+    def _save_streams(self, streams: list[EventStream]) -> None:
         for stream in streams:
             path = self.events_dir / f"{stream.game_id}.jsonl"
             stream.to_jsonl(path)
 
-    def _print_summary(self, streams: List[EventStream]) -> None:
+    def _print_summary(self, streams: list[EventStream]) -> None:
         total_events = sum(len(s) for s in streams)
         logger.info(
             f"[{self.cell}] Summary: {len(streams)} games, "
@@ -110,7 +107,7 @@ class BasePipeline(ABC):
             f"avg {total_events / max(len(streams), 1):.1f} events/game"
         )
 
-    def load_saved_streams(self) -> List[EventStream]:
+    def load_saved_streams(self) -> list[EventStream]:
         """Load previously saved event streams from disk."""
         streams = []
         for path in sorted(self.events_dir.glob("*.jsonl")):
@@ -125,8 +122,8 @@ class BasePipeline(ABC):
         game_id: str,
         cell: str,
         n_events: int,
-        event_types: List[str],
-        actors: List[str],
+        event_types: list[str],
+        actors: list[str],
         seed: int = 0,
     ) -> EventStream:
         """Utility: generate a synthetic EventStream with realistic structure."""

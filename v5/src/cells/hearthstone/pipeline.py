@@ -10,12 +10,10 @@ Sample target: 300 Legend-rank ladder games from 2024.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -41,7 +39,7 @@ class HearthstonePipeline(BasePipeline):
     extract_events()→ HearthstoneExtractor.extract() per game log
     """
 
-    def __init__(self, config: CellConfig, data_root: Optional[Path] = None):
+    def __init__(self, config: CellConfig, data_root: Path | None = None):
         super().__init__(config, data_root or Path(__file__).parent.parent.parent.parent / "data")
         self.extractor = HearthstoneExtractor()
         self.api_key = os.getenv("HSREPLAY_API_KEY", "")
@@ -49,7 +47,7 @@ class HearthstonePipeline(BasePipeline):
         if self.api_key:
             self.session.headers.update({"X-Api-Key": self.api_key})
 
-    def fetch(self) -> List[Path]:
+    def fetch(self) -> list[Path]:
         """Fetch replay files from HSReplay API."""
         paths = []
         replay_ids = self._list_legend_replays()
@@ -83,7 +81,7 @@ class HearthstonePipeline(BasePipeline):
                 logger.error(f"HSReplay fetch error for {replay_id}: {e}")
         return paths
 
-    def parse(self, raw_paths: List[Path]) -> List[dict]:
+    def parse(self, raw_paths: list[Path]) -> list[dict]:
         """Parse .hsreplay XML files using hearthstone.hslog."""
         try:
             from hearthstone.hslog.export import EntityTreeExporter
@@ -110,10 +108,10 @@ class HearthstonePipeline(BasePipeline):
                 logger.warning(f"hslog parse error for {path}: {e}")
         return records
 
-    def extract_events(self, game_records: List[dict]) -> List[EventStream]:
+    def extract_events(self, game_records: list[dict]) -> list[EventStream]:
         return [self.extractor.extract(record) for record in game_records if record]
 
-    def generate_mock_data(self) -> List[EventStream]:
+    def generate_mock_data(self) -> list[EventStream]:
         """
         Generate mock Hearthstone event streams.
         300 Legend games, ~80 events per game
@@ -158,7 +156,7 @@ class HearthstonePipeline(BasePipeline):
         logger.info(f"[hearthstone] Generated {len(streams)} mock streams")
         return streams
 
-    def _list_legend_replays(self) -> List[str]:
+    def _list_legend_replays(self) -> list[str]:
         """Query HSReplay API for Legend replay IDs."""
         ids = []
         params = {

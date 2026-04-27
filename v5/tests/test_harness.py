@@ -2,14 +2,17 @@
 Tests for the v5 statistical harness.
 """
 
-import pytest
-import numpy as np
 
-from v5.src.harness.mcnemar import run_mcnemar, aggregate_results
-from v5.src.harness.scoring import score_chain, score_batch, extract_binary_vectors, ChainScore
-from v5.src.harness.actionables import is_actionable, gate2_check, compute_retention_rate, ACTIONABLE_TYPES
+from v5.src.common.schema import ChainCandidate, GameEvent
+from v5.src.harness.actionables import (
+    ACTIONABLE_TYPES,
+    compute_retention_rate,
+    gate2_check,
+    is_actionable,
+)
+from v5.src.harness.mcnemar import aggregate_results, run_mcnemar
+from v5.src.harness.scoring import ChainScore, extract_binary_vectors, score_chain
 from v5.src.harness.variance import bootstrap_proportion_ci, mcnemar_power
-from v5.src.common.schema import GameEvent, ChainCandidate
 
 
 def make_event(event_type: str, cell: str = "nba", seq: int = 0) -> GameEvent:
@@ -146,7 +149,6 @@ class TestScoring:
         assert score.score_label == -1
 
     def test_extract_binary_vectors_excludes_abstain(self):
-        chains = [self._dummy_chain(i) for i in range(3)]
         b = [ChainScore("c0", "nba", True, "yes", "yes", 1),
              ChainScore("c1", "nba", None, "abstain", "yes", -1),
              ChainScore("c2", "nba", False, "no", "yes", 0)]

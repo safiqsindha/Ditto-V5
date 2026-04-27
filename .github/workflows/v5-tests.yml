@@ -29,13 +29,34 @@ jobs:
         # Domain pipelines have try/except ImportError guards for missing libs.
         run: |
           pip install --upgrade pip
-          pip install numpy scipy pyyaml pytest requests
+          pip install numpy scipy pyyaml pytest pytest-cov requests
 
-      - name: Run pytest
-        run: python -m pytest v5/tests/ -v
+      - name: Run pytest with coverage
+        run: |
+          python -m pytest v5/tests/ -v \
+            --cov=v5/src \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-report=html
 
       - name: Run pilot smoke test (mock data)
         run: python -m v5.run_pilot --output v5/RESULTS/pilot_report_ci.json
+
+      - name: Upload coverage HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-html
+          path: htmlcov/
+          if-no-files-found: ignore
+
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
 
       - name: Upload pilot report
         uses: actions/upload-artifact@v4

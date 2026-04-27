@@ -3,12 +3,8 @@ Tests for the pilot report markdown renderer.
 """
 
 import json
-from pathlib import Path
-
-import pytest
 
 from v5.src.pilot.render_report import render
-
 
 SAMPLE_REPORT = {
     "all_passed": True,

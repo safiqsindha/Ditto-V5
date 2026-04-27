@@ -16,16 +16,15 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
 
-from ..common.schema import ChainCandidate, EventStream, GameEvent
 from ..common.config import HarnessConfig, load_harness_config
+from ..common.schema import ChainCandidate, EventStream
 from ..interfaces.translation import TranslationFunction
-from .actionables import compute_retention_rate, gate2_check
+from .actionables import compute_retention_rate
 from .mcnemar import McnemarResult, aggregate_results, run_mcnemar
-from .scoring import ChainScore, extract_binary_vectors, score_batch
+from .scoring import extract_binary_vectors, score_batch
 from .variance import mcnemar_power, minimum_detectable_effect, variance_summary
 
 
@@ -38,12 +37,12 @@ class CellResult:
     n_chains_post_gate2: int
     retention_rate: float
     gate2_pass: bool
-    mcnemar: Optional[McnemarResult]
-    variance_baseline: Optional[dict]
-    variance_intervention: Optional[dict]
-    power: Optional[float]
-    mde: Optional[float]
-    errors: List[str] = field(default_factory=list)
+    mcnemar: McnemarResult | None
+    variance_baseline: dict | None
+    variance_intervention: dict | None
+    power: float | None
+    mde: float | None
+    errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -58,7 +57,7 @@ class RunReport:
     run_id: str
     timestamp: str
     config: dict
-    cells: List[CellResult]
+    cells: list[CellResult]
     aggregate: dict
 
     def to_dict(self) -> dict:
@@ -89,19 +88,19 @@ class CellRunner:
     report = runner.run(event_streams_by_cell)
     """
 
-    def __init__(self, config: Optional[HarnessConfig] = None):
+    def __init__(self, config: HarnessConfig | None = None):
         self.config = config or load_harness_config()
-        self._cell_translations: Dict[str, TranslationFunction] = {}
+        self._cell_translations: dict[str, TranslationFunction] = {}
 
     def register_cell(self, cell: str, translation_fn: TranslationFunction) -> None:
         self._cell_translations[cell] = translation_fn
 
     def run(
         self,
-        event_streams: Dict[str, List[EventStream]],
-        baseline_responses: Optional[Dict[str, List[str]]] = None,
-        intervention_responses: Optional[Dict[str, List[str]]] = None,
-        ground_truths: Optional[Dict[str, List[str]]] = None,
+        event_streams: dict[str, list[EventStream]],
+        baseline_responses: dict[str, list[str]] | None = None,
+        intervention_responses: dict[str, list[str]] | None = None,
+        ground_truths: dict[str, list[str]] | None = None,
     ) -> RunReport:
         """
         Run the full pipeline for all registered cells.
@@ -123,7 +122,12 @@ class CellRunner:
         cell_results = []
         mcnemar_results = []
 
-        for cell in self.config.cells:
+        # Iterate over the union of registered cells and cells with streams.
+        # This way: registered-but-streamless cells get a CellResult with errors,
+        # streams-but-unregistered cells get a CellResult flagging the missing T.
+        cells_to_run = sorted(set(self._cell_translations) | set(event_streams))
+
+        for cell in cells_to_run:
             streams = event_streams.get(cell, [])
             t_fn = self._cell_translations.get(cell)
 
@@ -152,17 +156,17 @@ class CellRunner:
     def _run_cell(
         self,
         cell: str,
-        streams: List[EventStream],
-        translation_fn: Optional[TranslationFunction],
-        baseline_responses: Optional[List[str]],
-        intervention_responses: Optional[List[str]],
-        ground_truths: Optional[List[str]],
+        streams: list[EventStream],
+        translation_fn: TranslationFunction | None,
+        baseline_responses: list[str] | None,
+        intervention_responses: list[str] | None,
+        ground_truths: list[str] | None,
     ) -> CellResult:
         errors = []
         n_events = sum(len(s) for s in streams)
 
         # Step 1: Translate event streams to chain candidates via T
-        chains: List[ChainCandidate] = []
+        chains: list[ChainCandidate] = []
         if translation_fn is None:
             errors.append(f"No TranslationFunction registered for cell '{cell}'")
         else:

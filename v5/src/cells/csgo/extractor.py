@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...common.schema import EventStream, GameEvent
 
@@ -64,7 +64,7 @@ GRENADE_TYPE_MAP = {
 
 class CSGOExtractor:
 
-    def extract(self, record: Dict[str, Any]) -> EventStream:
+    def extract(self, record: dict[str, Any]) -> EventStream:
         game_id = self._get_game_id(record)
         map_name = record.get("mapName", record.get("map", "unknown"))
         stream = EventStream(
@@ -114,7 +114,7 @@ class CSGOExtractor:
 
     def _parse_kill(
         self, kill: dict, game_id: str, round_num: int, start_ts: float, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         try:
             tick = float(kill.get("tick", 0))
             ts = start_ts + tick / 128.0
@@ -147,7 +147,7 @@ class CSGOExtractor:
 
     def _parse_grenade(
         self, gren: dict, game_id: str, round_num: int, start_ts: float, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         try:
             tick = float(gren.get("throwTick", gren.get("tick", 0)))
             ts = start_ts + tick / 128.0
@@ -176,7 +176,7 @@ class CSGOExtractor:
 
     def _parse_bomb(
         self, bomb_ev: dict, game_id: str, round_num: int, start_ts: float, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         try:
             tick = float(bomb_ev.get("tick", 0))
             ts = start_ts + tick / 128.0
@@ -204,7 +204,7 @@ class CSGOExtractor:
 
     def _parse_buy_phase(
         self, round_data: dict, game_id: str, round_num: int, start_ts: float, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         """Represent the buy phase as a resource_budget event."""
         try:
             ct_eq = round_data.get("ctEqVal", round_data.get("ctEqValue", 0))

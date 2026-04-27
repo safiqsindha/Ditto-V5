@@ -9,7 +9,6 @@ property; the scoring function compares the response to the ground truth.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ..common.schema import ChainCandidate
 
@@ -18,7 +17,7 @@ from ..common.schema import ChainCandidate
 class ChainScore:
     chain_id: str
     cell: str
-    correct: Optional[bool]     # None = abstain / unparseable
+    correct: bool | None     # None = abstain / unparseable
     model_response: str
     ground_truth: str
     score_label: int            # 1=correct, 0=incorrect, -1=abstain
@@ -63,21 +62,21 @@ def score_chain(
 
 
 def score_batch(
-    chains: List[ChainCandidate],
-    ground_truths: List[str],
-    model_responses: List[str],
-) -> List[ChainScore]:
+    chains: list[ChainCandidate],
+    ground_truths: list[str],
+    model_responses: list[str],
+) -> list[ChainScore]:
     if not (len(chains) == len(ground_truths) == len(model_responses)):
         raise ValueError("chains, ground_truths, and model_responses must be same length")
     return [
         score_chain(chain, gt, resp)
-        for chain, gt, resp in zip(chains, ground_truths, model_responses)
+        for chain, gt, resp in zip(chains, ground_truths, model_responses, strict=True)
     ]
 
 
 def extract_binary_vectors(
-    baseline_scores: List[ChainScore],
-    intervention_scores: List[ChainScore],
+    baseline_scores: list[ChainScore],
+    intervention_scores: list[ChainScore],
     exclude_abstain: bool = True,
 ) -> tuple[list[bool], list[bool]]:
     """
@@ -89,7 +88,7 @@ def extract_binary_vectors(
 
     baseline_vec = []
     intervention_vec = []
-    for b, i in zip(baseline_scores, intervention_scores):
+    for b, i in zip(baseline_scores, intervention_scores, strict=True):
         if exclude_abstain and (b.correct is None or i.correct is None):
             continue
         baseline_vec.append(bool(b.correct))

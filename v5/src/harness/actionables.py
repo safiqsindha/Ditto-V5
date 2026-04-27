@@ -12,9 +12,7 @@ actionable meets or exceeds the retention floor (default 0.50).
 
 from __future__ import annotations
 
-from typing import List
-
-from ..common.schema import GameEvent, ChainCandidate
+from ..common.schema import ChainCandidate, GameEvent
 
 # ---------------------------------------------------------------------------
 # Core ACTIONABLE_TYPES whitelist (v1.1)
@@ -107,7 +105,7 @@ def gate2_check(chain: ChainCandidate, floor: float = 0.50) -> bool:
     return chain.is_actionable
 
 
-def compute_retention_rate(chains: List[ChainCandidate], floor: float = 0.50) -> dict:
+def compute_retention_rate(chains: list[ChainCandidate], floor: float = 0.50) -> dict:
     """
     Batch Gate 2 check. Returns summary statistics.
     """

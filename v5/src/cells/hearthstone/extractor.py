@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...common.schema import EventStream, GameEvent
 
@@ -49,7 +49,7 @@ ZONE_MAP = {0: "INVALID", 1: "PLAY", 2: "DECK", 3: "HAND", 4: "GRAVEYARD",
 
 class HearthstoneExtractor:
 
-    def extract(self, record: Dict[str, Any]) -> EventStream:
+    def extract(self, record: dict[str, Any]) -> EventStream:
         game_id = f"hs_{record.get('game_id', hashlib.md5(str(record)[:64].encode()).hexdigest()[:12])}"
         stream = EventStream(game_id=game_id, cell="hearthstone")
 

@@ -1,0 +1,40 @@
+{
+  "header": {
+    "replayId": "fnc_test_replay_001",
+    "eventType": "FNCS",
+    "region": "NA_East",
+    "season": "Ch5S1",
+    "timestamp": "2024-03-15T14:00:00Z",
+    "matchId": "match_001"
+  },
+  "stormEvents": [
+    {"elapsedTime": 90.0, "phase": 1, "circleCenterX": 0, "circleCenterY": 0, "circleRadius": 5000},
+    {"elapsedTime": 240.0, "phase": 2, "circleCenterX": 100, "circleCenterY": -50, "circleRadius": 3000},
+    {"elapsedTime": 420.0, "phase": 3, "circleCenterX": 200, "circleCenterY": 100, "circleRadius": 1500}
+  ],
+  "playerEliminations": [
+    {
+      "time": 120.5,
+      "eliminator": {"id": "player_001", "team": "team_a"},
+      "eliminated": {"id": "player_042", "team": "team_b"},
+      "gunType": "AssaultRifle",
+      "knocked": false
+    },
+    {
+      "time": 305.2,
+      "eliminator": {"id": "player_007", "team": "team_c"},
+      "eliminated": {"id": "player_018", "team": "team_d"},
+      "gunType": "Shotgun",
+      "knocked": true
+    }
+  ],
+  "gameEvents": [
+    {"type": "BuildWall", "time": 65.1, "playerId": "player_001", "posX": 100, "posY": 200, "posZ": 30},
+    {"type": "HarvestItem", "time": 78.4, "playerId": "player_001", "posX": 102, "posY": 201, "posZ": 30},
+    {"type": "ConsumeItem", "time": 250.0, "playerId": "player_001", "posX": 150, "posY": 220, "posZ": 30},
+    {"type": "PlayerJump", "time": 80.0, "playerId": "player_007"},
+    {"type": "MapMarker", "time": 150.0, "playerId": "player_007"},
+    {"type": "VehicleEnter", "time": 200.0, "playerId": "player_007"},
+    {"type": "PhaseChange", "time": 240.0, "playerId": "system"}
+  ]
+}

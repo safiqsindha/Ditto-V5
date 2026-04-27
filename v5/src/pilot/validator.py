@@ -20,10 +20,9 @@ import logging
 import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
-from ..common.schema import ChainCandidate, EventStream, GameEvent
-from ..harness.actionables import compute_retention_rate, is_actionable
+from ..common.schema import ChainCandidate, EventStream
+from ..harness.actionables import compute_retention_rate
 from ..interfaces.translation import TranslationFunction
 from .mock_t import MockT
 
@@ -59,10 +58,10 @@ class CellPilotReport:
     event_type_distribution: dict
 
     # Sample chains for inspection (up to PILOT_SAMPLE_SIZE)
-    sample_chain_summaries: List[dict]
+    sample_chain_summaries: list[dict]
 
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -91,7 +90,7 @@ class CellPilotReport:
             for e in self.errors:
                 print(f"  ERROR: {e}")
         print()
-        print(f"  Top event types:")
+        print("  Top event types:")
         for etype, count in sorted(
             self.event_type_distribution.items(), key=lambda x: -x[1]
         )[:10]:
@@ -125,7 +124,7 @@ class CellPilotReport:
 @dataclass
 class PilotReport:
     """Aggregate pilot validation results across all cells."""
-    cells: List[CellPilotReport]
+    cells: list[CellPilotReport]
     all_passed: bool
 
     def print_summary(self) -> None:
@@ -162,16 +161,16 @@ class PilotValidator:
 
     def __init__(self, gate2_floor: float = 0.50):
         self.gate2_floor = gate2_floor
-        self._cell_translations: Dict[str, TranslationFunction] = {}
+        self._cell_translations: dict[str, TranslationFunction] = {}
 
-    def register_cell(self, cell: str, translation_fn: Optional[TranslationFunction] = None) -> None:
+    def register_cell(self, cell: str, translation_fn: TranslationFunction | None = None) -> None:
         if translation_fn is None:
             translation_fn = MockT(cell=cell)
         self._cell_translations[cell] = translation_fn
 
     def run(
         self,
-        streams_by_cell: Dict[str, List[EventStream]],
+        streams_by_cell: dict[str, list[EventStream]],
         sample_size: int = PILOT_SAMPLE_SIZE,
     ) -> PilotReport:
         cell_reports = []
@@ -186,7 +185,7 @@ class PilotValidator:
     def _validate_cell(
         self,
         cell: str,
-        streams: List[EventStream],
+        streams: list[EventStream],
         translation_fn: TranslationFunction,
         sample_size: int,
     ) -> CellPilotReport:
@@ -196,7 +195,7 @@ class PilotValidator:
         n_events = sum(len(s) for s in streams)
 
         # Translate to chains
-        chains: List[ChainCandidate] = []
+        chains: list[ChainCandidate] = []
         try:
             for stream in streams:
                 chains.extend(translation_fn.translate(stream))
@@ -283,7 +282,7 @@ class PilotValidator:
         )
 
 
-def _count_event_types(chains: List[ChainCandidate]) -> dict:
+def _count_event_types(chains: list[ChainCandidate]) -> dict:
     counts: dict = {}
     for chain in chains:
         for ev in chain.events:

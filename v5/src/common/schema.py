@@ -8,8 +8,8 @@ layer (T). All per-domain pipelines must produce streams of GameEvents.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
-from typing import Any, Iterator, List, Optional
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 VALID_CELLS = frozenset(["fortnite", "nba", "csgo", "rocket_league", "hearthstone"])
@@ -40,8 +40,8 @@ class GameEvent:
     game_id: str
     sequence_idx: int
     # Optional enrichment fields; pipelines may populate these
-    actor_team: Optional[str] = None
-    phase: Optional[str] = None   # e.g. "regular_season", "playoffs", "round_1"
+    actor_team: str | None = None
+    phase: str | None = None   # e.g. "regular_season", "playoffs", "round_1"
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -60,11 +60,11 @@ class GameEvent:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, d: dict) -> "GameEvent":
+    def from_dict(cls, d: dict) -> GameEvent:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
     @classmethod
-    def from_json(cls, s: str) -> "GameEvent":
+    def from_json(cls, s: str) -> GameEvent:
         return cls.from_dict(json.loads(s))
 
 
@@ -75,7 +75,7 @@ class EventStream:
     """
     game_id: str
     cell: str
-    events: List[GameEvent] = field(default_factory=list)
+    events: list[GameEvent] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
 
     def append(self, event: GameEvent) -> None:
@@ -96,7 +96,7 @@ class EventStream:
                 f.write(ev.to_json() + "\n")
 
     @classmethod
-    def from_jsonl(cls, path: Path) -> "EventStream":
+    def from_jsonl(cls, path: Path) -> EventStream:
         with open(path) as f:
             lines = f.readlines()
         header = json.loads(lines[0])
@@ -116,12 +116,12 @@ class ChainCandidate:
     chain_id: str
     game_id: str
     cell: str
-    events: List[GameEvent]
+    events: list[GameEvent]
     chain_metadata: dict = field(default_factory=dict)
     # Populated by harness after evaluation
-    is_actionable: Optional[bool] = None
-    model_response: Optional[str] = None
-    scored_correct: Optional[bool] = None
+    is_actionable: bool | None = None
+    model_response: str | None = None
+    scored_correct: bool | None = None
 
     def __len__(self) -> int:
         return len(self.events)

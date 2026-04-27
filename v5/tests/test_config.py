@@ -2,7 +2,6 @@
 Tests for v5 config loading.
 """
 
-import pytest
 
 from v5.src.common.config import (
     CellConfig,

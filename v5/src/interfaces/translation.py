@@ -17,7 +17,6 @@ To implement T for a domain:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
 
 from ..common.schema import ChainCandidate, EventStream
 
@@ -42,7 +41,7 @@ class TranslationFunction(ABC):
         ...
 
     @abstractmethod
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         """
         Convert a normalized event stream to candidate constraint chains.
 
@@ -67,7 +66,7 @@ class TranslationFunction(ABC):
             "See v5/SPEC.md [REQUIRES SIGN-OFF] sections."
         )
 
-    def batch_translate(self, streams: List[EventStream]) -> List[ChainCandidate]:
+    def batch_translate(self, streams: list[EventStream]) -> list[ChainCandidate]:
         """Translate multiple streams. Default: calls translate() per stream."""
         chains = []
         for stream in streams:
@@ -87,7 +86,7 @@ class FortniteT(TranslationFunction):
     def cell(self) -> str:
         return "fortnite"
 
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         raise NotImplementedError(
             "FortniteT requires both-author review. See SPEC.md §T-Fortnite."
         )
@@ -100,7 +99,7 @@ class NBAT(TranslationFunction):
     def cell(self) -> str:
         return "nba"
 
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         raise NotImplementedError(
             "NBAT requires both-author review. See SPEC.md §T-NBA."
         )
@@ -113,7 +112,7 @@ class CSGOT(TranslationFunction):
     def cell(self) -> str:
         return "csgo"
 
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         raise NotImplementedError(
             "CSGOT requires both-author review. See SPEC.md §T-CSGO."
         )
@@ -126,7 +125,7 @@ class RocketLeagueT(TranslationFunction):
     def cell(self) -> str:
         return "rocket_league"
 
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         raise NotImplementedError(
             "RocketLeagueT requires both-author review. See SPEC.md §T-RocketLeague."
         )
@@ -139,7 +138,7 @@ class HearthstoneT(TranslationFunction):
     def cell(self) -> str:
         return "hearthstone"
 
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         raise NotImplementedError(
             "HearthstoneT requires both-author review. See SPEC.md §T-Hearthstone."
         )

@@ -7,7 +7,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
 try:
     import yaml
@@ -26,9 +25,9 @@ class CellConfig:
     sample_target: int          # matches / games / replays / maps
     time_range_start: str
     time_range_end: str
-    env_vars: List[str]
+    env_vars: list[str]
     mock_fallback: bool
-    stratification: List[dict]
+    stratification: list[dict]
     extra: dict = field(default_factory=dict)
 
     def env_satisfied(self) -> bool:
@@ -53,7 +52,7 @@ class HarnessConfig:
     aggregate_reporting: bool = True
 
 
-def load_cell_configs() -> Dict[str, CellConfig]:
+def load_cell_configs() -> dict[str, CellConfig]:
     if not _YAML_AVAILABLE:
         return _default_cell_configs()
     path = CONFIG_DIR / "cells.yaml"
@@ -114,7 +113,7 @@ def load_harness_config() -> HarnessConfig:
     )
 
 
-def _default_cell_configs() -> Dict[str, CellConfig]:
+def _default_cell_configs() -> dict[str, CellConfig]:
     defaults = {
         "fortnite": (200, ["EPIC_ACCOUNT_ID", "EPIC_ACCESS_TOKEN"]),
         "nba": (300, []),

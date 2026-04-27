@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...common.schema import EventStream, GameEvent
 
@@ -27,7 +27,7 @@ class FortniteExtractor:
     Extracts normalized GameEvents from a decompressed Fortnite replay JSON.
     """
 
-    def extract(self, record: Dict[str, Any]) -> EventStream:
+    def extract(self, record: dict[str, Any]) -> EventStream:
         """Convert a replay JSON record to a normalized EventStream."""
         header = record.get("header", {})
         game_id = self._make_game_id(record, header)
@@ -71,7 +71,7 @@ class FortniteExtractor:
 
         return stream
 
-    def _parse_storm_event(self, ev: dict, game_id: str, seq: int) -> Optional[GameEvent]:
+    def _parse_storm_event(self, ev: dict, game_id: str, seq: int) -> GameEvent | None:
         try:
             return GameEvent(
                 timestamp=float(ev.get("elapsedTime", ev.get("timestamp", 0))),
@@ -93,7 +93,7 @@ class FortniteExtractor:
             logger.debug(f"Storm event parse error: {e}")
             return None
 
-    def _parse_elimination(self, ev: dict, game_id: str, seq: int) -> Optional[GameEvent]:
+    def _parse_elimination(self, ev: dict, game_id: str, seq: int) -> GameEvent | None:
         try:
             return GameEvent(
                 timestamp=float(ev.get("time", ev.get("timestamp", 0))),
@@ -114,7 +114,7 @@ class FortniteExtractor:
             logger.debug(f"Elimination parse error: {e}")
             return None
 
-    def _parse_game_event(self, ev: dict, game_id: str, seq: int) -> Optional[GameEvent]:
+    def _parse_game_event(self, ev: dict, game_id: str, seq: int) -> GameEvent | None:
         raw_type = ev.get("type", ev.get("eventType", "unknown"))
         normalized_type = self._normalize_event_type(raw_type)
         if normalized_type is None:
@@ -139,7 +139,7 @@ class FortniteExtractor:
             return None
 
     @staticmethod
-    def _normalize_event_type(raw_type: str) -> Optional[str]:
+    def _normalize_event_type(raw_type: str) -> str | None:
         """Map raw Fortnite event types to normalized actionable types."""
         mapping = {
             "BuildWall": "resource_spend",

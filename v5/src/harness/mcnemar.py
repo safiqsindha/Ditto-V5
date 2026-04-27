@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import numpy as np
 from scipy import stats
@@ -62,8 +61,8 @@ class McnemarResult:
 
 
 def run_mcnemar(
-    baseline_correct: List[bool],
-    intervention_correct: List[bool],
+    baseline_correct: list[bool],
+    intervention_correct: list[bool],
     cell: str,
     alpha: float = 0.05,
     bonferroni_divisor: int = 5,
@@ -87,7 +86,7 @@ def run_mcnemar(
     if len(baseline_correct) != len(intervention_correct):
         raise ValueError("baseline and intervention lists must be same length")
 
-    pairs = list(zip(baseline_correct, intervention_correct))
+    pairs = list(zip(baseline_correct, intervention_correct, strict=True))
     a = sum(1 for b, i in pairs if b and i)
     b = sum(1 for b, i in pairs if b and not i)
     c = sum(1 for b, i in pairs if not b and i)
@@ -154,7 +153,7 @@ def _bootstrap_ci(
     iterations: int,
     seed: int,
     confidence: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Bootstrap CI on the proportion difference (P(intervention) - P(baseline))."""
     rng = np.random.default_rng(seed)
     n = len(baseline)
@@ -171,7 +170,7 @@ def _bootstrap_ci(
     return float(np.quantile(diffs, lo)), float(np.quantile(diffs, hi))
 
 
-def aggregate_results(cell_results: List[McnemarResult]) -> dict:
+def aggregate_results(cell_results: list[McnemarResult]) -> dict:
     """
     Produce aggregate summary across all cells.
     Uses pooled discordant pairs for a combined McNemar statistic.

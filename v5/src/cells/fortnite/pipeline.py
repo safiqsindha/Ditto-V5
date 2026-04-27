@@ -21,12 +21,10 @@ import json
 import logging
 import os
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from ...common.config import CellConfig
-from ...common.schema import EventStream, GameEvent
+from ...common.schema import EventStream
 from ..base_pipeline import BasePipeline
 from .extractor import FortniteExtractor
 
@@ -61,13 +59,13 @@ class FortnitePipeline(BasePipeline):
     extract_events()→ FortniteExtractor.extract() per decompressed JSON
     """
 
-    def __init__(self, config: CellConfig, data_root: Optional[Path] = None):
+    def __init__(self, config: CellConfig, data_root: Path | None = None):
         super().__init__(config, data_root or Path(__file__).parent.parent.parent.parent / "data")
         self.extractor = FortniteExtractor()
         self.account_id = os.getenv("EPIC_ACCOUNT_ID", "")
         self.access_token = os.getenv("EPIC_ACCESS_TOKEN", "")
 
-    def fetch(self) -> List[Path]:
+    def fetch(self) -> list[Path]:
         """
         Download tournament replays using replay-downloader CLI.
 
@@ -103,7 +101,7 @@ class FortnitePipeline(BasePipeline):
                 logger.error(f"replay-downloader timed out for {event_id}")
         return downloaded
 
-    def parse(self, raw_paths: List[Path]) -> List[dict]:
+    def parse(self, raw_paths: list[Path]) -> list[dict]:
         """
         Decompress .replay files using FortniteReplayDecompressor.
         Produces one JSON dict per replay.
@@ -133,14 +131,14 @@ class FortnitePipeline(BasePipeline):
                 logger.error(f"Parse error for {replay_path}: {e}")
         return records
 
-    def extract_events(self, game_records: List[dict]) -> List[EventStream]:
+    def extract_events(self, game_records: list[dict]) -> list[EventStream]:
         return [
             self.extractor.extract(record)
             for record in game_records
             if record
         ]
 
-    def generate_mock_data(self) -> List[EventStream]:
+    def generate_mock_data(self) -> list[EventStream]:
         """
         Generate mock Fortnite event streams.
         Produces 200 mock matches with Fortnite-realistic event types.
@@ -167,7 +165,7 @@ class FortnitePipeline(BasePipeline):
         logger.info(f"[fortnite] Generated {len(streams)} mock streams")
         return streams
 
-    def _get_target_events(self) -> List[str]:
+    def _get_target_events(self) -> list[str]:
         strat = self.config.stratification
         events = []
         for s in strat:

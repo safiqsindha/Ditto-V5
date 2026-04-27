@@ -21,7 +21,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -45,7 +44,7 @@ class RocketLeaguePipeline(BasePipeline):
     extract_events()→ RocketLeagueExtractor.extract() per parsed replay
     """
 
-    def __init__(self, config: CellConfig, data_root: Optional[Path] = None):
+    def __init__(self, config: CellConfig, data_root: Path | None = None):
         super().__init__(config, data_root or Path(__file__).parent.parent.parent.parent / "data")
         self.extractor = RocketLeagueExtractor()
         self.api_token = os.getenv("BALLCHASING_TOKEN", "")
@@ -53,7 +52,7 @@ class RocketLeaguePipeline(BasePipeline):
         if self.api_token:
             self.session.headers.update({"Authorization": self.api_token})
 
-    def fetch(self) -> List[Path]:
+    def fetch(self) -> list[Path]:
         """Fetch RLCS replay files from BallChasing API."""
         replay_ids = self._list_rlcs_replays()
         paths = []
@@ -81,7 +80,7 @@ class RocketLeaguePipeline(BasePipeline):
                 logger.error(f"Failed to fetch replay {replay_id}: {e}")
         return paths
 
-    def parse(self, raw_paths: List[Path]) -> List[dict]:
+    def parse(self, raw_paths: list[Path]) -> list[dict]:
         """Parse .replay files using carball."""
         records = []
         for replay_path in raw_paths:
@@ -101,7 +100,7 @@ class RocketLeaguePipeline(BasePipeline):
                 records.append(data)
         return records
 
-    def _parse_replay(self, path: Path) -> Optional[dict]:
+    def _parse_replay(self, path: Path) -> dict | None:
         """Try carball first, then rrrocket subprocess."""
         try:
             import carball
@@ -132,10 +131,10 @@ class RocketLeaguePipeline(BasePipeline):
             logger.debug(f"rrrocket error for {path}: {e}")
         return None
 
-    def extract_events(self, game_records: List[dict]) -> List[EventStream]:
+    def extract_events(self, game_records: list[dict]) -> list[EventStream]:
         return [self.extractor.extract(record) for record in game_records if record]
 
-    def generate_mock_data(self) -> List[EventStream]:
+    def generate_mock_data(self) -> list[EventStream]:
         """
         Generate mock Rocket League event streams.
         250 RLCS replays, ~200 events per replay (5 min game × ~40 key events/min
@@ -166,7 +165,7 @@ class RocketLeaguePipeline(BasePipeline):
         logger.info(f"[rocket_league] Generated {len(streams)} mock streams")
         return streams
 
-    def _list_rlcs_replays(self) -> List[str]:
+    def _list_rlcs_replays(self) -> list[str]:
         """Query BallChasing API for RLCS replay IDs."""
         ids = []
         params = {

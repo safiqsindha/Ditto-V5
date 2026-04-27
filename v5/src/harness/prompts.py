@@ -19,7 +19,6 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ..common.schema import ChainCandidate, GameEvent
 
@@ -85,8 +84,8 @@ class PromptBuilder:
 
     # --- Composition --------------------------------------------------------
     @staticmethod
-    def _compose(chain_block: str, constraint_block: Optional[str], question: str) -> str:
-        parts: List[str] = []
+    def _compose(chain_block: str, constraint_block: str | None, question: str) -> str:
+        parts: list[str] = []
         if constraint_block:
             parts.append("## Constraint Context\n" + constraint_block.strip())
         parts.append("## Event Chain\n" + chain_block.strip())
@@ -202,7 +201,7 @@ _ABSTAIN_PATTERNS = re.compile(
 )
 
 
-def parse_model_response(raw: str, allowed_predictions: Optional[List[str]] = None) -> str:
+def parse_model_response(raw: str, allowed_predictions: list[str] | None = None) -> str:
     """
     Parse a model response string into a normalized prediction.
 

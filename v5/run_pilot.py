@@ -15,7 +15,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
@@ -38,11 +37,11 @@ def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
     harness_config = load_harness_config()
 
     # Import pipelines
-    from v5.src.cells.fortnite.pipeline import FortnitePipeline
-    from v5.src.cells.nba.pipeline import NBAPipeline
     from v5.src.cells.csgo.pipeline import CSGOPipeline
-    from v5.src.cells.rocket_league.pipeline import RocketLeaguePipeline
+    from v5.src.cells.fortnite.pipeline import FortnitePipeline
     from v5.src.cells.hearthstone.pipeline import HearthstonePipeline
+    from v5.src.cells.nba.pipeline import NBAPipeline
+    from v5.src.cells.rocket_league.pipeline import RocketLeaguePipeline
 
     pipeline_map = {
         "fortnite": FortnitePipeline,

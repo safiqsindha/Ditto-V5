@@ -2,7 +2,6 @@
 Tests for the v5 pilot validation harness and MockT.
 """
 
-import pytest
 
 from v5.src.common.schema import EventStream, GameEvent
 from v5.src.pilot.mock_t import MockT

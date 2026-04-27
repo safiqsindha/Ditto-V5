@@ -12,9 +12,8 @@ Real T implementations require both-author review and are out of scope.
 from __future__ import annotations
 
 import hashlib
-from typing import List
 
-from ..common.schema import ChainCandidate, EventStream, GameEvent
+from ..common.schema import ChainCandidate, EventStream
 from ..harness.actionables import is_actionable
 from ..interfaces.translation import TranslationFunction
 
@@ -47,7 +46,7 @@ class MockT(TranslationFunction):
     def cell(self) -> str:
         return self._cell
 
-    def translate(self, stream: EventStream) -> List[ChainCandidate]:
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
         """
         Slide a window over the event stream, emitting one chain per window.
         Only includes events that are actionable under v1.1 rules.

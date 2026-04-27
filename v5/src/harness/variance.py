@@ -10,18 +10,17 @@ Provides:
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Tuple
 
 import numpy as np
 from scipy import stats
 
 
 def bootstrap_proportion_ci(
-    correct: List[bool],
+    correct: list[bool],
     iterations: int = 10000,
     seed: int = 42,
     confidence: float = 0.95,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Bootstrap CI on a single proportion (fraction correct)."""
     arr = np.array(correct, dtype=float)
     n = len(arr)
@@ -46,7 +45,6 @@ def mcnemar_power(
     n_disc = b + c
     if n_disc == 0:
         return 0.0
-    p = c / n_disc  # estimated proportion c/(b+c)
     alpha_corr = alpha / bonferroni_divisor
     z_alpha = stats.norm.ppf(1.0 - alpha_corr / 2.0)
     z_beta = (abs(b - c) / math.sqrt(n_disc) - z_alpha)
@@ -74,7 +72,7 @@ def minimum_detectable_effect(
 
 
 def variance_summary(
-    correct_list: List[bool],
+    correct_list: list[bool],
     cell: str,
     iterations: int = 10000,
     seed: int = 42,

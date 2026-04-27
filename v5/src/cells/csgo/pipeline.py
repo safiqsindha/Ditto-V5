@@ -18,7 +18,6 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -56,11 +55,11 @@ class CSGOPipeline(BasePipeline):
     extract_events()→ CSGOExtractor.extract() per parsed demo
     """
 
-    def __init__(self, config: CellConfig, data_root: Optional[Path] = None):
+    def __init__(self, config: CellConfig, data_root: Path | None = None):
         super().__init__(config, data_root or Path(__file__).parent.parent.parent.parent / "data")
         self.extractor = CSGOExtractor()
 
-    def fetch(self) -> List[Path]:
+    def fetch(self) -> list[Path]:
         """Download .dem files from HLTV demo archive."""
         paths = []
         match_ids = self._get_target_match_ids()
@@ -88,7 +87,7 @@ class CSGOPipeline(BasePipeline):
                 logger.error(f"Failed to fetch demo {match_id}: {e}")
         return paths
 
-    def parse(self, raw_paths: List[Path]) -> List[dict]:
+    def parse(self, raw_paths: list[Path]) -> list[dict]:
         """Parse .dem files using awpy."""
         try:
             from awpy import DemoParser
@@ -117,10 +116,10 @@ class CSGOPipeline(BasePipeline):
                 logger.error(f"awpy parse error for {dem_path}: {e}")
         return records
 
-    def extract_events(self, game_records: List[dict]) -> List[EventStream]:
+    def extract_events(self, game_records: list[dict]) -> list[EventStream]:
         return [self.extractor.extract(record) for record in game_records if record]
 
-    def generate_mock_data(self) -> List[EventStream]:
+    def generate_mock_data(self) -> list[EventStream]:
         """
         Generate mock CS2 event streams.
         150 tournament maps, ~300 events per map (full match ~2700 ticks,
@@ -156,7 +155,7 @@ class CSGOPipeline(BasePipeline):
         logger.info(f"[csgo] Generated {len(streams)} mock streams")
         return streams
 
-    def _get_target_match_ids(self) -> List[int]:
+    def _get_target_match_ids(self) -> list[int]:
         ids = []
         for event_group in HLTV_2024_MATCH_IDS.values():
             ids.extend(event_group)

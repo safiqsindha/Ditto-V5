@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...common.schema import EventStream, GameEvent  # noqa: F401
 
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # NBA event message type codes → normalized event types
 # See: https://github.com/swar/nba_api/blob/master/docs/nba_api/stats/endpoints/playbyplayv3.md
-NBA_EVENTMSGTYPE_MAP: Dict[int, str] = {
+NBA_EVENTMSGTYPE_MAP: dict[int, str] = {
     1: "engage_decision",    # field goal made
     2: "engage_decision",    # field goal missed
     3: "ability_use",        # free throw
@@ -79,7 +79,7 @@ POSSESSION_ENDING_MSGTYPES = {1, 5, 13}  # Made shot, turnover, end of period
 
 class NBAExtractor:
 
-    def extract(self, record: Dict[str, Any]) -> EventStream:
+    def extract(self, record: dict[str, Any]) -> EventStream:
         """
         Per Q6 sign-off (D-21): possession-level extraction.
         Each possession produces one summary GameEvent representing the
@@ -118,15 +118,15 @@ class NBAExtractor:
         return stream
 
     @staticmethod
-    def _group_into_possessions(plays: List[dict]) -> List[List[dict]]:
+    def _group_into_possessions(plays: list[dict]) -> list[list[dict]]:
         """
         Group a list of parsed play dicts into possessions.
         A new possession begins after a possession-ending event.
         """
         if not plays:
             return []
-        possessions: List[List[dict]] = []
-        current: List[dict] = []
+        possessions: list[list[dict]] = []
+        current: list[dict] = []
         for play in plays:
             current.append(play)
             msgtype = play.get("msgtype", 0)
@@ -155,8 +155,8 @@ class NBAExtractor:
         return possessions
 
     def _make_possession_event(
-        self, plays: List[dict], game_id: str, seq: int
-    ) -> Optional[GameEvent]:
+        self, plays: list[dict], game_id: str, seq: int
+    ) -> GameEvent | None:
         """Build one GameEvent representing the entire possession."""
         if not plays:
             return None
@@ -188,7 +188,7 @@ class NBAExtractor:
 
     def _parse_row_raw(
         self, row: list, col_idx: dict, game_id: str
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Parse one PBP row into a flat dict (intermediate; not a GameEvent)."""
         try:
             period = int(row[col_idx["PERIOD"]])
@@ -228,7 +228,7 @@ class NBAExtractor:
     # micro-experiment if pursued). Not used by extract() under Q6-A.
     def _parse_row(
         self, row: list, col_idx: dict, game_id: str, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         """Legacy play-level parser. Reserved for ME-3 (NBA play-level micro-exp)."""
         d = self._parse_row_raw(row, col_idx, game_id)
         if d is None:
@@ -254,7 +254,7 @@ class NBAExtractor:
 
     def _parse_row(
         self, row: list, col_idx: dict, game_id: str, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         try:
             period = int(row[col_idx["PERIOD"]])
             pctimestring = str(row[col_idx.get("PCTIMESTRING", -1)] or "12:00")

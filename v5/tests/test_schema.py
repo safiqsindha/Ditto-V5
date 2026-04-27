@@ -3,16 +3,13 @@ Tests for v5 common schema: GameEvent, EventStream, ChainCandidate.
 """
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
-
 from v5.src.common.schema import (
+    VALID_CELLS,
     ChainCandidate,
     EventStream,
     GameEvent,
-    VALID_CELLS,
 )
 
 

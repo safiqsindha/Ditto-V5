@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from ...common.config import CellConfig
 from ...common.schema import EventStream
@@ -42,18 +41,17 @@ class NBAPipeline(BasePipeline):
     extract_events()→ NBAExtractor.extract() per game
     """
 
-    def __init__(self, config: CellConfig, data_root: Optional[Path] = None):
+    def __init__(self, config: CellConfig, data_root: Path | None = None):
         super().__init__(config, data_root or Path(__file__).parent.parent.parent.parent / "data")
         self.extractor = NBAExtractor()
 
-    def fetch(self) -> List[Path]:
+    def fetch(self) -> list[Path]:
         """
         Fetch play-by-play data for all target games.
         Saves raw JSON to data/raw/nba/{game_id}.json.
         """
         try:
             from nba_api.stats.endpoints import playbyplayv3
-            from nba_api.stats.static import teams
         except ImportError:
             logger.error("nba_api not installed. Run: pip install nba_api")
             return []
@@ -77,7 +75,7 @@ class NBAPipeline(BasePipeline):
                 logger.warning(f"Failed to fetch game {game_id}: {e}")
         return paths
 
-    def parse(self, raw_paths: List[Path]) -> List[dict]:
+    def parse(self, raw_paths: list[Path]) -> list[dict]:
         import json
         records = []
         for path in raw_paths:
@@ -88,10 +86,10 @@ class NBAPipeline(BasePipeline):
                 logger.warning(f"Failed to parse {path}: {e}")
         return records
 
-    def extract_events(self, game_records: List[dict]) -> List[EventStream]:
+    def extract_events(self, game_records: list[dict]) -> list[EventStream]:
         return [self.extractor.extract(record) for record in game_records if record]
 
-    def generate_mock_data(self) -> List[EventStream]:
+    def generate_mock_data(self) -> list[EventStream]:
         """
         Generate mock NBA play-by-play event streams.
         300 games: 240 regular season + 60 playoff.
@@ -128,7 +126,7 @@ class NBAPipeline(BasePipeline):
         logger.info(f"[nba] Generated {len(streams)} mock streams")
         return streams
 
-    def _get_target_game_ids(self) -> List[str]:
+    def _get_target_game_ids(self) -> list[str]:
         """Return list of game IDs to fetch based on stratification config."""
         strat = self.config.stratification
         game_ids = []

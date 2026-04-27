@@ -14,9 +14,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
 
-from ..common.schema import ChainCandidate, EventStream, GameEvent
+from ..common.schema import ChainCandidate, EventStream
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +27,9 @@ class ChainBuilder(ABC):
     def build(
         self,
         candidates_or_streams,
-        chain_length: Optional[int] = None,
+        chain_length: int | None = None,
         overlap: bool = False,
-    ) -> List[ChainCandidate]:
+    ) -> list[ChainCandidate]:
         ...
 
 
@@ -53,12 +52,12 @@ class FixedPerCellChainBuilder(ChainBuilder):
 
     def __init__(
         self,
-        per_cell_chain_length: Optional[Dict[str, Optional[int]]] = None,
+        per_cell_chain_length: dict[str, int | None] | None = None,
         overlap: bool = False,
         sampling: str = "sequential",
     ):
         # Per Q4-locked config: non-overlapping, sequential
-        self.per_cell_chain_length: Dict[str, Optional[int]] = per_cell_chain_length or {
+        self.per_cell_chain_length: dict[str, int | None] = per_cell_chain_length or {
             "fortnite": None,
             "nba": None,
             "csgo": None,
@@ -84,10 +83,10 @@ class FixedPerCellChainBuilder(ChainBuilder):
 
     def build_from_streams(
         self,
-        streams: List[EventStream],
+        streams: list[EventStream],
         cell: str,
-        max_chains: Optional[int] = None,
-    ) -> List[ChainCandidate]:
+        max_chains: int | None = None,
+    ) -> list[ChainCandidate]:
         """
         Build chains from a list of EventStreams for one cell.
 
@@ -97,7 +96,7 @@ class FixedPerCellChainBuilder(ChainBuilder):
         builder will subsample uniformly across streams.
         """
         chain_length = self.get_chain_length(cell)
-        all_chains: List[ChainCandidate] = []
+        all_chains: list[ChainCandidate] = []
 
         for stream in streams:
             if stream.cell != cell:
@@ -116,9 +115,9 @@ class FixedPerCellChainBuilder(ChainBuilder):
 
     def _build_one_stream(
         self, stream: EventStream, chain_length: int
-    ) -> List[ChainCandidate]:
+    ) -> list[ChainCandidate]:
         """Slide a fixed window over the stream's events. Non-overlapping."""
-        chains: List[ChainCandidate] = []
+        chains: list[ChainCandidate] = []
         events = stream.events
         if len(events) < chain_length:
             return chains
@@ -147,9 +146,9 @@ class FixedPerCellChainBuilder(ChainBuilder):
     def build(
         self,
         candidates_or_streams,
-        chain_length: Optional[int] = None,
+        chain_length: int | None = None,
         overlap: bool = False,
-    ) -> List[ChainCandidate]:
+    ) -> list[ChainCandidate]:
         if not candidates_or_streams:
             return []
         first = candidates_or_streams[0]

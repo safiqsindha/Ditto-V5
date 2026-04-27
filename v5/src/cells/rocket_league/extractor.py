@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...common.schema import EventStream, GameEvent
 
@@ -60,7 +60,7 @@ LOW_BOOST_THRESHOLD = 25
 
 class RocketLeagueExtractor:
 
-    def extract(self, record: Dict[str, Any]) -> EventStream:
+    def extract(self, record: dict[str, Any]) -> EventStream:
         game_id = self._get_game_id(record)
         stream = EventStream(game_id=game_id, cell="rocket_league")
 
@@ -147,7 +147,7 @@ class RocketLeagueExtractor:
 
     def _parse_carball_hit(
         self, hit: dict, game_id: str, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         try:
             ts = float(hit.get("frame_number", hit.get("frame", 0))) / 30.0
             actor_id = str(hit.get("player_id", {}).get("id", "unknown"))
@@ -177,7 +177,7 @@ class RocketLeagueExtractor:
 
     def _parse_boost_event(
         self, boost_ev: dict, player: dict, game_id: str, seq: int
-    ) -> Optional[GameEvent]:
+    ) -> GameEvent | None:
         try:
             boost_type = boost_ev.get("type", "pickup_big")
             etype = BOOST_EVENT_MAP.get(boost_type, "resource_gain")

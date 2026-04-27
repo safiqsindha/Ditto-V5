@@ -18,9 +18,7 @@ Use:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Dict, Optional
-
+from dataclasses import asdict, dataclass
 
 # Pricing per million tokens, claude-haiku-4-5-20251001
 HAIKU_PRICE_PER_M_INPUT = 0.25
