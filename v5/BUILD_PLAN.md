@@ -332,16 +332,16 @@ Draft v5/SPEC.md with:
 ## Success Criteria
 
 **Minimum (must hit):**
-- [ ] All five `src/cells/*/pipeline.py` files exist and runnable with mock data
-- [ ] All five `src/cells/*/extractor.py` produce `GameEvent` streams
-- [ ] `src/harness/` fully functional (McNemar, scoring, variance, cell runner)
-- [ ] `src/interfaces/` stubs raise `NotImplementedError` cleanly
-- [ ] `src/pilot/validator.py` runs against mock T output
-- [ ] `v5/SPEC.md` with all [REQUIRES SIGN-OFF] sections marked
-- [ ] `v5/DECISION_LOG.md` populated throughout
-- [ ] `v5/STATUS.md` written at session end
+- [x] All five `src/cells/*/pipeline.py` files exist and runnable with mock data
+- [x] All five `src/cells/*/extractor.py` produce `GameEvent` streams
+- [x] `src/harness/` fully functional (McNemar, scoring, variance, cell runner)
+- [x] `src/interfaces/` stubs raise `NotImplementedError` cleanly (verified by test_stub_t_raises_noted_not_crashes)
+- [x] `src/pilot/validator.py` runs against mock T output (5/5 cells PASS)
+- [x] `v5/SPEC.md` with all [REQUIRES SIGN-OFF] sections marked (Q1–Q8)
+- [x] `v5/DECISION_LOG.md` populated throughout (D-0 through D-13)
+- [x] `v5/STATUS.md` written at session end
 
 **Aspirational (if time permits):**
-- [ ] Basic distributional sanity checks per cell using mock data
-- [ ] Tests in `tests/` for harness and pilot modules
-- [ ] Event stream sizing estimates per cell based on mock runs
+- [x] Basic distributional sanity checks per cell using mock data (chain length, actionable fraction, event-type distribution per cell in PilotValidator)
+- [x] Tests in `tests/` for harness and pilot modules (29/29 PASS)
+- [x] Event stream sizing estimates per cell based on mock runs (1,200 streams persisted: 200/300/150/250/300)
