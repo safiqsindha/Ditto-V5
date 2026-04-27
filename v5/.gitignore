@@ -26,3 +26,8 @@ data/events/**/*
 
 # Pilot result outputs
 RESULTS/*.json
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
