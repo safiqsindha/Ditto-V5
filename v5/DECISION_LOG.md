@@ -285,3 +285,46 @@ Pilot run confirmed 7,740–18,420 chains per cell (all well above 1,200 target)
 **Reversibility:** Easy — `n_events` parameter in `generate_mock_data()` per pipeline.
 
 **Needs review before SPEC sign-off:** No — mock sizing doesn't affect pre-registration decisions.
+
+---
+
+## Decision D-14: `force_mock` Parameter on Pipelines
+
+**Context:** End-of-day audit caught that NBA and CS:GO pipelines have `env_vars: []` in their config. Python's `all([])` is vacuously True, so `env_satisfied()` returned True, so `should_use_mock()` returned False. The pilot run path was bypassing this by calling `generate_mock_data()` directly, but the bug was invisible until I tried to call `pipeline.run()` for stream persistence — at which point NBA pipeline started attempting real API calls.
+
+**Question:** Should we (a) fix the `env_satisfied()` semantics to require explicit credentials, (b) add a `force_mock` parameter to make pilot/infrastructure runs unambiguous, or (c) require all cells to have at least one declared env var?
+
+**Default chosen:** (b) — added `force_mock=False` parameter to `BasePipeline.run()`. When True, skips fetch/parse and uses mock data regardless of credential state. `run_pilot.py` updated to use `force_mock=True`. Test added (`test_force_mock_overrides_credentials`).
+
+**Reasoning:** Option (a) would change the meaning of "no credentials required" in cells like NBA/CS:GO that legitimately have public APIs. Option (c) is unnatural — NBA Stats API genuinely needs no key. Option (b) makes intent explicit at the call site without restricting the underlying logic.
+
+**Alternatives considered:**
+- Auto-detect "infrastructure" mode by environment variable: too magical; obscures which path actually ran.
+- Always default to mock for cells with `env_vars=[]`: would make NBA/CS:GO real-data acquisition awkward (would require explicit override).
+
+**Reversibility:** Easy — single optional parameter, default preserves prior behavior.
+
+**Needs review before SPEC sign-off:** No — this is a correctness fix for the existing infrastructure, not a methodological choice.
+
+---
+
+## Decision D-15: Fortnite Pipeline — Burner Account + Proxy/Rate-Limiter
+
+**Context:** During the build session, the user noted that FortniteTracker (TRN) and Replay.io are easier-auth alternatives to the current xNocken + FortniteReplayDecompressor pipeline, but they provide aggregated stats (placement, kill counts) rather than raw spatial telemetry.
+
+**Question:** Should we switch to TRN/Replay.io for simpler authentication, or stick with the current pipeline despite credential complexity?
+
+**Default chosen:** Stick with xNocken/replay-downloader + FortniteReplayDecompressor. User to provide a Node.js async queue snippet that uses a burner Epic account + proxy/rate-limiter to avoid main-account flagging.
+
+**Reasoning:** The current pipeline produces `GameEvent` streams with full spatial telemetry (player positions, build events with x/y/z coordinates, eliminations with attacker/victim positions). This is what the `FortniteExtractor` is designed to consume and what makes Fortnite's chain-detection methodologically informative. Aggregated-stats sources would force us to either (a) drop spatial features or (b) add a separate spatial source — neither attractive.
+
+**Alternatives considered:**
+- TRN API: Aggregated only; loses spatial decision context.
+- Replay.io: Same limitation; depends on event being indexed.
+- Pure mock for v5 evaluation: Defeats the experiment's purpose for the Fortnite cell.
+
+**Reversibility:** Moderate — switching parsers later would require rewriting `FortniteExtractor` and re-running acquisition.
+
+**Needs review before SPEC sign-off:** No — this is a tooling and operational-security decision, not a methodological one. The user's Node.js queue snippet, when provided, will be added to `v5/src/cells/fortnite/fetch_queue.js` and invoked from `pipeline.fetch()` via `subprocess.run(["node", "fetch_queue.js", ...])`.
+
+**Pending dependency:** Awaiting user-provided Node.js async queue snippet.
