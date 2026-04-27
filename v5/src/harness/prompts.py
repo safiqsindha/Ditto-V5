@@ -155,29 +155,105 @@ def _short(v) -> str:
 # at T-design time (Phase B).
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# Per-cell PromptBuilders — constraint context locked in Phase B 2026-04-27.
+# CF-1=A (natural language), CF-2=D (binary classify), CF-4=B (domain only).
+# ---------------------------------------------------------------------------
+
+_CLASSIFY_QUESTION = (
+    "Is the sequence of events above consistent with the rules of {domain}?\n"
+    "Reply with exactly one word: YES or NO."
+)
+
+
 class FortnitePromptBuilder(PromptBuilder):
+    """F-5 constraint context locked Phase B."""
+
     def __init__(self):
         super().__init__(cell="fortnite")
 
+    def format_constraint_context(self, chain: ChainCandidate) -> str:
+        return (
+            "In Fortnite, players must remain within the safe storm zone or take "
+            "damage over time. An eliminated player cannot generate further actions. "
+            "Building structures consumes exactly one material per piece."
+        )
+
+    def format_question(self, chain: ChainCandidate) -> str:
+        return _CLASSIFY_QUESTION.format(domain="Fortnite")
+
 
 class NBAPromptBuilder(PromptBuilder):
+    """N-5 constraint context locked Phase B."""
+
     def __init__(self):
         super().__init__(cell="nba")
 
+    def format_constraint_context(self, chain: ChainCandidate) -> str:
+        return (
+            "In NBA basketball, the offensive team must attempt a shot within 24 "
+            "seconds of gaining possession. Personal fouls accumulate; a player with "
+            "six fouls is ejected and cannot return. Possession changes on made shots, "
+            "turnovers, and defensive rebounds."
+        )
+
+    def format_question(self, chain: ChainCandidate) -> str:
+        return _CLASSIFY_QUESTION.format(domain="NBA basketball")
+
 
 class CSGOPromptBuilder(PromptBuilder):
+    """C-5 constraint context locked Phase B."""
+
     def __init__(self):
         super().__init__(cell="csgo")
 
+    def format_constraint_context(self, chain: ChainCandidate) -> str:
+        return (
+            "In Counter-Strike, each round one team plants and detonates the bomb "
+            "(Terrorist win) or the other defuses it or eliminates all attackers "
+            "(Counter-Terrorist win). Eliminated players do not respawn until the next "
+            "round. The bomb may only be planted at designated sites A or B."
+        )
+
+    def format_question(self, chain: ChainCandidate) -> str:
+        return _CLASSIFY_QUESTION.format(domain="Counter-Strike")
+
 
 class RocketLeaguePromptBuilder(PromptBuilder):
+    """R-5 constraint context locked Phase B."""
+
     def __init__(self):
         super().__init__(cell="rocket_league")
 
+    def format_constraint_context(self, chain: ChainCandidate) -> str:
+        return (
+            "In Rocket League, teams of three score by hitting a ball into the opposing "
+            "goal. Each car has a boost meter capped at 100 that depletes with use; "
+            "boost is collected from pads on the field. A goal resets ball position to "
+            "center and ends the current play."
+        )
+
+    def format_question(self, chain: ChainCandidate) -> str:
+        return _CLASSIFY_QUESTION.format(domain="Rocket League")
+
 
 class HearthstonePromptBuilder(PromptBuilder):
+    """H-5 constraint context locked Phase B."""
+
     def __init__(self):
         super().__init__(cell="hearthstone")
+
+    def format_constraint_context(self, chain: ChainCandidate) -> str:
+        return (
+            "In Hearthstone, players take alternating turns. Each turn the active "
+            "player gains one mana crystal (max 10) and may play cards costing up to "
+            "the available mana; unspent mana does not carry over. Minions and heroes "
+            "have health; reaching zero health removes them from play."
+        )
+
+    def format_question(self, chain: ChainCandidate) -> str:
+        return _CLASSIFY_QUESTION.format(domain="Hearthstone")
 
 
 PER_CELL_PROMPT_BUILDERS = {

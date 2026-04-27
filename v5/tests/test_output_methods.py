@@ -160,30 +160,45 @@ class TestSchemaEdgeCases:
             EventStream.from_jsonl(path)
 
 
-class TestTranslationStubs:
-    @pytest.mark.parametrize("stub_class,cell_name", [
+class TestTranslationImplementations:
+    """T classes are now fully implemented (Phase B locked 2026-04-27)."""
+
+    @pytest.mark.parametrize("t_class,cell_name", [
         ("FortniteT", "fortnite"),
         ("NBAT", "nba"),
         ("CSGOT", "csgo"),
         ("RocketLeagueT", "rocket_league"),
         ("HearthstoneT", "hearthstone"),
     ])
-    def test_each_stub_raises_with_cell_name(self, stub_class, cell_name):
+    def test_each_t_has_correct_cell_name(self, t_class, cell_name):
         from v5.src.interfaces import translation
-        cls = getattr(translation, stub_class)
+        cls = getattr(translation, t_class)
         instance = cls()
         assert instance.cell == cell_name
-        stream = EventStream(game_id="x", cell=cell_name)
-        with pytest.raises(NotImplementedError, match="SPEC.md"):
-            instance.translate(stream)
 
-    def test_batch_translate_propagates_not_implemented(self):
+    @pytest.mark.parametrize("t_class,cell_name", [
+        ("FortniteT", "fortnite"),
+        ("NBAT", "nba"),
+        ("CSGOT", "csgo"),
+        ("RocketLeagueT", "rocket_league"),
+        ("HearthstoneT", "hearthstone"),
+    ])
+    def test_each_t_translate_returns_list(self, t_class, cell_name):
+        from v5.src.interfaces import translation
+        cls = getattr(translation, t_class)
+        instance = cls()
+        stream = EventStream(game_id="x", cell=cell_name)
+        # Empty stream → empty list (no crash)
+        result = instance.translate(stream)
+        assert isinstance(result, list)
+
+    def test_batch_translate_returns_list(self):
         from v5.src.interfaces.translation import FortniteT
         t = FortniteT()
-        with pytest.raises(NotImplementedError):
-            t.batch_translate([EventStream(game_id="x", cell="fortnite")])
+        result = t.batch_translate([EventStream(game_id="x", cell="fortnite")])
+        assert isinstance(result, list)
 
-    def test_domain_t_stubs_registry_complete(self):
+    def test_domain_t_registry_complete(self):
         from v5.src.common.schema import VALID_CELLS
         from v5.src.interfaces.translation import DOMAIN_T_STUBS
         assert set(DOMAIN_T_STUBS.keys()) == VALID_CELLS

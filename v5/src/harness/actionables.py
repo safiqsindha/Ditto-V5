@@ -71,12 +71,32 @@ ACTIONABLE_TYPES: frozenset[str] = frozenset([
 # Per-cell type overrides: additional domain-specific types that qualify
 # as actionable. These MUST be pre-registered before use in real evaluation.
 # Populated here as empty dicts so the interface is defined.
+
+# Phase B locked 2026-04-27 (both authors). See DECISION_LOG D-24 through D-28.
 CELL_ACTIONABLE_OVERRIDES: dict[str, frozenset[str]] = {
-    "fortnite": frozenset(),        # e.g. "storm_rotation", "build_decision"
-    "nba": frozenset(),             # e.g. "shot_selection", "defensive_assignment"
-    "csgo": frozenset(),            # e.g. "buy_decision", "utility_deploy"
-    "rocket_league": frozenset(),   # e.g. "boost_decision", "aerial_commit"
-    "hearthstone": frozenset(),     # e.g. "card_play", "hero_power"
+    "fortnite": frozenset([         # F-6 locked
+        "storm_rotation",           # storm-zone rotation decision
+        "build_decision",           # build structure (consumes material)
+    ]),
+    "nba": frozenset([              # N-6 locked
+        "shot_selection",           # shot attempt decision
+        "clutch_decision",          # high-leverage end-game decision
+    ]),
+    "csgo": frozenset([             # C-6 locked
+        "buy_decision",             # pre-round equipment purchase
+        "utility_deploy",           # grenade / utility deployment decision
+        "bombsite_commit",          # bomb plant or defuse commitment
+    ]),
+    "rocket_league": frozenset([    # R-6 locked
+        "aerial_commit",            # aerial approach commitment
+        "boost_steal",              # opponent boost pad denial
+        "rotation_back",            # defensive rotation decision
+    ]),
+    "hearthstone": frozenset([      # H-6 locked
+        "card_play",                # card played from hand
+        "lethal_lining_up",         # lethal setup sequence
+        "mana_curve_choice",        # optimal mana-spend decision
+    ]),
 }
 
 

@@ -59,14 +59,15 @@ class TestCellRunnerNoModelResponses:
         csgo_result = next(r for r in report.cells if r.cell == "csgo")
         assert any("No TranslationFunction" in e for e in csgo_result.errors)
 
-    def test_t_not_implemented_error_recorded(self):
+    def test_nba_t_runs_and_produces_chains(self):
         from v5.src.interfaces.translation import NBAT
         runner = CellRunner(config=_harness_cfg())
         runner.register_cell("nba", NBAT())
         streams = {"nba": [_stream("nba", 20)]}
         report = runner.run(streams)
         nba_result = next(r for r in report.cells if r.cell == "nba")
-        assert any("not implemented" in e.lower() for e in nba_result.errors)
+        # Real T runs without "not implemented" errors
+        assert not any("not implemented" in e.lower() for e in nba_result.errors)
 
     def test_run_id_and_timestamp_set(self):
         runner = CellRunner(config=_harness_cfg())

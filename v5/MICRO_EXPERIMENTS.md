@@ -56,3 +56,78 @@ If v5 primary results justify a micro-experiment:
 3. Implement the variant in a side-branch (`claude/me-{N}-{shortname}`).
 4. Run, score, report — same harness, just the parameter swapped.
 5. Cross-reference results in v5/RESULTS/ME_{N}_results.md.
+
+---
+
+## ME-4: CF-1 Variants — Formal Predicate (B) and In-Context Examples (C)
+
+**Source:** Phase B session — CF-1 locked at A (natural language); B and C noted as interesting.
+
+**Premise:** Would a formal predicate list (e.g., "Invariant 1: eliminated player event_count = 0") or in-context examples of constraint violations improve detection accuracy over natural-language description?
+
+**Contingency:** Run if v5 primary shows ≥ 3/5 significant cells. Variant compares A vs B vs C on the same chains.
+
+**Pre-registration required:** Yes.
+
+---
+
+## ME-5: CF-2 Variants — Prediction Targets A, B, C
+
+**Source:** Phase B session — CF-2 locked at D (binary); A/B/C noted.
+
+**Premise:**
+- ME-5A: Predict next event type (A) — tests sequential constraint knowledge
+- ME-5B: Predict actor of next event (B) — tests player-tracking constraint knowledge
+- ME-5C: Predict domain outcome (C) — tests terminal constraint prediction
+
+**Contingency:** Run if v5 primary D (binary) shows ≥ 3/5 significant. Variants test whether detection generalizes across prediction formulations.
+
+**Pre-registration required:** Yes per variant.
+
+---
+
+## ME-6: CF-4 Variant — Anonymous Chains (A)
+
+**Source:** Phase B session — CF-4 locked at B (domain label only); A noted.
+
+**Premise:** Does removing the domain label ("this is a CS:GO chain") change detection accuracy? Would the model rely purely on structural sequence patterns?
+
+**Contingency:** Run in any cell that shows a significant effect. Low cost — only prompt format changes.
+
+**Pre-registration required:** Yes.
+
+---
+
+## ME-RL-1: Rocket League Per-Player Chains
+
+**Source:** Phase B session user suggestion — "could you make chains per player?"
+
+**Premise:** Instead of per-play chains (team-level), extract per-player chains: for each player, extract their actions within a play (hits + boost decisions). This tests whether individual player boost-economy detection is stronger than team-level.
+
+**Contingency:** Run if RL primary shows significant effect. Per-player variant is the main v6 Rocket League T design candidate (D-33).
+
+**Cost estimate:** ~3× chains per play (3 players); ~3× API cost for RL cell only (~$0.80 extra).
+
+**Pre-registration required:** Yes.
+
+---
+
+## ME-FN-1: Fortnite Build-Cost Constraint
+
+**Source:** Phase B F-1 decision — build-cost rule noted for future testing.
+
+**Premise:** Add "building consumes one material" as a testable constraint. Generate build-decision sub-chains and test whether the model detects phantom builds (build without material deduction).
+
+**Contingency:** Run if primary Fortnite shows significant effect AND we have build-event-level data from the FortniteReplayDecompressor.
+
+**Pre-registration required:** Yes.
+
+---
+
+## ME-RL-2: Rocket League Possession-Level vs Play-Level
+
+**Source:** D-33 — RL T variability noted as high.
+
+**Premise:** Re-run RL with possession-level chains (Q7-B, not currently primary) to compare against play-level (Q7-C, primary). Tests whether boost-economy detection is stronger at possession or play granularity.
+
+**Pre-registration required:** Yes.

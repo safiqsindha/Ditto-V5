@@ -470,3 +470,152 @@ Pilot run confirmed 7,740–18,420 chains per cell (all well above 1,200 target)
 **Reversibility:** Easy.
 
 **Needs review before SPEC sign-off:** Done — locked.
+
+---
+
+## Decision D-24: Phase B CF-1 — Constraint Expression Format
+
+**Context:** Phase B joint authoring session 2026-04-27 (lead author + Myriam).
+
+**Question:** How is constraint expressed in the prompt?
+
+**Decision:** (A) Natural-language description of rule structure.
+
+**Reasoning:** Matches v3 framing; easiest to keep consistent across 5 cells. B (formal predicate list) and C (in-context examples) noted as interesting variants for future study.
+
+**Code impact:** `format_constraint_context()` in each PromptBuilder subclass now returns natural-language text. See prompts.py.
+
+---
+
+## Decision D-25: Phase B CF-2 — Prediction Target
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Question:** What is the model asked to predict?
+
+**Decision:** (D) Binary classify: is this chain constraint-respecting or constraint-violating? YES / NO.
+
+**Reasoning:** Directly tests the detection methodology; matches v3's framing. Options A (next event type), B (actor), C (domain outcome) flagged as micro-experiment variants.
+
+**Code impact:** `format_question()` in each PromptBuilder returns "Is this sequence consistent with [domain] rules? Reply YES or NO." `parse_model_response` already handles binary tokens.
+
+---
+
+## Decision D-26: Phase B CF-3 — Shuffled Controls
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Question:** Do we generate shuffled-chain controls?
+
+**Decision:** (A) Yes — 1× shuffled chains per cell as controls (random event reordering within game). Matches v3 design.
+
+**Reasoning:** v5 is intended to replicate v3's detection methodology across new domains. Shuffled controls are the primary comparison; without them, we have no within-experiment null distribution.
+
+**Code impact:** ChainBuilder will need a `shuffle_chains()` method (Phase D implementation). Budget impact: 2× chains = 2× API calls = ~$3.90 total (within cap).
+
+---
+
+## Decision D-27: Phase B CF-4 — Chain Provenance
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Question:** What provenance does the model see?
+
+**Decision:** (B) Domain only — model sees "this is a CS:GO chain" but no team/player/tournament identifiers.
+
+**Reasoning:** Prevents model leaning on memorized tournament facts. Option A (anonymous) flagged as a micro-experiment — interesting to see if domain label helps or hurts detection.
+
+**Code impact:** PromptBuilder formats events with cell name visible but strips actor names where they would reveal specific players. Implemented via format_event() (using generic actor IDs from the schema).
+
+---
+
+## Decision D-28: Phase B F-1–F-6 — Fortnite T Design
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Decisions:**
+- F-1: Constraint = storm-zone boundary + elimination causality. Build-cost rule noted for future testing.
+- F-2: Chain = storm-rotation phase (zone_enter / zone_exit / position_commit trigger window)
+- F-3: N = 8
+- F-4: Binary classify (follows CF-2)
+- F-5: "In Fortnite, players must remain within the safe storm zone or take damage over time. An eliminated player cannot generate further actions. Building structures consumes exactly one material per piece."
+- F-6: Add storm_rotation, build_decision to CELL_ACTIONABLE_OVERRIDES["fortnite"]
+
+**Code impact:** FortniteT implemented in translation.py. FortnitePromptBuilder updated. harness.yaml fortnite: 8. actionables.py overrides populated.
+
+---
+
+## Decision D-29: Phase B N-1–N-6 — NBA T Design
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Decisions:**
+- N-1: shot-clock (24s) + foul-out (6 fouls = ejection)
+- N-2: consecutive possessions from single quarter
+- N-3: N = 5
+- N-4: Binary classify (follows CF-2)
+- N-5: (see prompts.py NBAPromptBuilder)
+- N-6: Add shot_selection, clutch_decision to overrides
+
+**Code impact:** NBAT implemented. NBAPromptBuilder updated. harness.yaml nba: 5.
+
+---
+
+## Decision D-30: Phase B C-1–C-6 — CS:GO T Design
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Decisions:**
+- C-1: Respawn-disabled + bomb-objective (buy-phase economy is pre-round, less useful chain-level)
+- C-2: Full round (buy phase + tactical phase + outcome)
+- C-3: N = 10
+- C-4: Binary classify (follows CF-2)
+- C-5: (see prompts.py CSGOPromptBuilder)
+- C-6: Add buy_decision, utility_deploy, bombsite_commit to overrides
+
+**Code impact:** CSGOT implemented. CSGOPromptBuilder updated. harness.yaml csgo: 10.
+
+---
+
+## Decision D-31: Phase B R-1–R-6 — Rocket League T Design
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Decisions:**
+- R-1: Boost-economy (max 100, depletes, replenishes) + goal-causality
+- R-2: Play = team-possession sequence to next team's possession or goal (boost events interleaved)
+- R-3: N = 12
+- R-4: Binary classify (follows CF-2)
+- R-5: (see prompts.py RocketLeaguePromptBuilder)
+- R-6: Add aerial_commit, boost_steal, rotation_back to overrides
+- NOTE: per-player chain variant flagged as ME-RL-1 for v6 deep T analysis
+
+**Code impact:** RocketLeagueT implemented. RocketLeaguePromptBuilder updated. harness.yaml rocket_league: 12.
+
+---
+
+## Decision D-32: Phase B H-1–H-6 — Hearthstone T Design
+
+**Context:** Phase B joint authoring session 2026-04-27.
+
+**Decisions:**
+- H-1: Mana-cost rule + turn-alternation + board-state (minion HP → removal)
+- H-2: All actions within one player's turn
+- H-3: N = 6
+- H-4: Binary classify (follows CF-2)
+- H-5: (see prompts.py HearthstonePromptBuilder)
+- H-6: Add card_play, lethal_lining_up, mana_curve_choice to overrides
+
+**Code impact:** HearthstoneT implemented. HearthstonePromptBuilder updated. harness.yaml hearthstone: 6.
+
+---
+
+## Decision D-33: Phase B insight — Fortnite + RL T variability
+
+**Context:** Lead author observation during Phase B session.
+
+**Observation:** "T structure for Fortnite and Rocket League can vary heavily — deep T analysis in v6."
+
+**Decision:** Flag Fortnite and RL as priority cells for v6 T-design refinement. Both cells have multi-dimensional constraint structure (spatial + resource for RL, spatial + elimination + temporal for Fortnite) that a single T may compress too aggressively.
+
+**Follow-up:** ME-FN-1 (build-cost constraint variant), ME-RL-1 (per-player chains), and ME-RL-2 (possession-level vs play-level) are pre-registered for v6 consideration.

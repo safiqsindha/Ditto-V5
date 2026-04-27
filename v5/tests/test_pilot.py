@@ -109,12 +109,13 @@ class TestPilotValidator:
         assert hasattr(r, "sample_chain_summaries")
         assert isinstance(r.event_type_distribution, dict)
 
-    def test_stub_t_raises_noted_not_crashes(self):
+    def test_fortnite_t_runs_without_errors(self):
         from v5.src.interfaces.translation import FortniteT
         validator = PilotValidator()
         validator.register_cell("fortnite", FortniteT())
         streams = {"fortnite": self._make_streams("fortnite", n_games=3)}
         report = validator.run(streams)
         r = report.cells[0]
-        assert any("not implemented" in e.lower() or "NotImplementedError" in e
-                   for e in r.errors), "Expected NotImplementedError to be recorded"
+        assert r.cell == "fortnite"
+        # Real T runs without "not implemented" errors
+        assert not any("not implemented" in e.lower() for e in r.errors)
