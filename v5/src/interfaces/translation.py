@@ -68,6 +68,7 @@ class TranslationFunction(ABC):
 # ---------------------------------------------------------------------------
 
 _FORTNITE_STORM_TRIGGERS = frozenset({"zone_enter", "zone_exit", "position_commit"})
+_FORTNITE_BUILD_TRIGGERS = frozenset({"build_decision", "resource_spend", "resource_budget"})
 _FORTNITE_N = 8
 
 
@@ -125,6 +126,74 @@ class FortniteT(TranslationFunction):
                     "trigger_idx": i,
                     "window_start": start,
                     "window_size": len(window),
+                },
+            ))
+
+        return chains
+
+
+# ---------------------------------------------------------------------------
+# ME-FN-1: FortniteBuildCostT
+# Micro-experiment: centers windows on build_decision / resource_spend /
+#   resource_budget instead of storm-boundary events. Tests whether build-cost
+#   constraint (can't spend more materials than held) produces a different
+#   distributional signal than the primary storm-rotation constraint.
+# ---------------------------------------------------------------------------
+
+
+class FortniteBuildCostT(TranslationFunction):
+    """
+    ME-FN-1: Extract build-cost decision windows from a Fortnite event stream.
+
+    Same windowing algorithm as FortniteT (centered, de-duplicated, N=8) but
+    triggered by build_decision / resource_spend / resource_budget events
+    instead of storm-boundary events.
+
+    Constraint (ME-FN-1): build-cost (player cannot place structures that cost
+    more materials than they currently hold).
+    """
+
+    @property
+    def cell(self) -> str:
+        return "fortnite"
+
+    def translate(self, stream: EventStream) -> list[ChainCandidate]:
+        events = stream.events
+        if not events:
+            return []
+
+        half = _FORTNITE_N // 2
+        seen_starts: set[int] = set()
+        chains: list[ChainCandidate] = []
+
+        for i, ev in enumerate(events):
+            if ev.event_type not in _FORTNITE_BUILD_TRIGGERS:
+                continue
+            start = max(0, i - half)
+            end = start + _FORTNITE_N
+            if end > len(events):
+                end = len(events)
+                start = max(0, end - _FORTNITE_N)
+            if start in seen_starts:
+                continue
+            seen_starts.add(start)
+
+            window = events[start:end]
+            if len(window) < 2:
+                continue
+
+            chains.append(ChainCandidate(
+                chain_id=self._chain_id(stream.game_id, f"fn_build_{start}"),
+                game_id=stream.game_id,
+                cell="fortnite",
+                events=window,
+                chain_metadata={
+                    "chain_type": "build_cost",
+                    "trigger_type": ev.event_type,
+                    "trigger_idx": i,
+                    "window_start": start,
+                    "window_size": len(window),
+                    "me": "ME-FN-1",
                 },
             ))
 
@@ -468,4 +537,11 @@ DOMAIN_T_STUBS: dict[str, TranslationFunction] = {
 DOMAIN_T_ME_RL1: dict[str, TranslationFunction] = {
     **DOMAIN_T_STUBS,
     "rocket_league": RocketLeaguePlayerT(),
+}
+
+# ME-FN-1 variant registry — build-cost Fortnite windows (micro-experiment).
+# Use in place of DOMAIN_T_STUBS["fortnite"] to test build-cost constraint signal.
+DOMAIN_T_ME_FN1: dict[str, TranslationFunction] = {
+    **DOMAIN_T_STUBS,
+    "fortnite": FortniteBuildCostT(),
 }

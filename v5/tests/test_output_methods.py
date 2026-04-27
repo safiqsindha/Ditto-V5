@@ -428,3 +428,137 @@ class TestRocketLeaguePlayerT:
         from v5.src.interfaces.translation import DOMAIN_T_STUBS
         for cell in ["fortnite", "nba", "csgo", "hearthstone"]:
             assert type(DOMAIN_T_ME_RL1[cell]) is type(DOMAIN_T_STUBS[cell])
+
+
+# ---------------------------------------------------------------------------
+# ME-FN-1: FortniteBuildCostT build-cost window variant
+# ---------------------------------------------------------------------------
+
+class TestFortniteBuildCostT:
+    """ME-FN-1: build-decision centered windows instead of storm-boundary triggers."""
+
+    def _fn_stream(self, n_build: int = 5, n_other: int = 20,
+                   game_id: str = "fn_me_fn1") -> EventStream:
+        from v5.src.common.schema import EventStream, GameEvent
+        stream = EventStream(game_id=game_id, cell="fortnite")
+        idx = 0
+        # Interleave build_decision with other events
+        for i in range(n_build + n_other):
+            etype = "build_decision" if i % (n_other // max(n_build, 1) + 1) == 0 \
+                else "engage_decision"
+            stream.append(GameEvent(
+                timestamp=float(idx),
+                event_type=etype,
+                actor="p1",
+                location_context={},
+                raw_data_blob={},
+                cell="fortnite",
+                game_id=game_id,
+                sequence_idx=idx,
+            ))
+            idx += 1
+        return stream
+
+    def _fn_stream_with_triggers(self, game_id: str = "fn_build_t") -> EventStream:
+        """Stream containing all three ME-FN-1 trigger types."""
+        from v5.src.common.schema import EventStream, GameEvent
+        stream = EventStream(game_id=game_id, cell="fortnite")
+        trigger_types = ["build_decision", "resource_spend", "resource_budget"]
+        for i in range(30):
+            etype = trigger_types[i % 3] if i % 5 == 0 else "engage_decision"
+            stream.append(GameEvent(
+                timestamp=float(i),
+                event_type=etype,
+                actor="p1",
+                location_context={},
+                raw_data_blob={},
+                cell="fortnite",
+                game_id=game_id,
+                sequence_idx=i,
+            ))
+        return stream
+
+    def test_produces_chains_from_build_events(self):
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = self._fn_stream(n_build=4, n_other=30)
+        chains = FortniteBuildCostT().translate(stream)
+        assert len(chains) > 0, "Should produce at least one chain from build triggers"
+
+    def test_chain_type_is_build_cost(self):
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = self._fn_stream(n_build=4, n_other=30)
+        chains = FortniteBuildCostT().translate(stream)
+        for chain in chains:
+            assert chain.chain_metadata.get("chain_type") == "build_cost"
+
+    def test_metadata_tagged_with_me_fn1(self):
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = self._fn_stream(n_build=4, n_other=30)
+        chains = FortniteBuildCostT().translate(stream)
+        assert chains, "Need at least one chain"
+        for chain in chains:
+            assert chain.chain_metadata.get("me") == "ME-FN-1"
+
+    def test_all_three_trigger_types_recognized(self):
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = self._fn_stream_with_triggers()
+        chains = FortniteBuildCostT().translate(stream)
+        trigger_types_found = {c.chain_metadata["trigger_type"] for c in chains}
+        # At least one of the three build trigger types should appear
+        assert trigger_types_found & {"build_decision", "resource_spend", "resource_budget"}
+
+    def test_no_storm_triggers_produce_no_chains(self):
+        """FortniteT storms events should not trigger FortniteBuildCostT."""
+        from v5.src.common.schema import EventStream, GameEvent
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = EventStream(game_id="storm_only", cell="fortnite")
+        for i in range(20):
+            etype = "zone_enter" if i % 5 == 0 else "engage_decision"
+            stream.append(GameEvent(
+                timestamp=float(i), event_type=etype, actor="p1",
+                location_context={}, raw_data_blob={},
+                cell="fortnite", game_id="storm_only", sequence_idx=i,
+            ))
+        chains = FortniteBuildCostT().translate(stream)
+        # zone_enter is not a build trigger — should produce zero chains
+        assert chains == []
+
+    def test_cell_is_fortnite(self):
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        assert FortniteBuildCostT().cell == "fortnite"
+
+    def test_empty_stream_returns_empty(self):
+        from v5.src.common.schema import EventStream
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = EventStream(game_id="empty", cell="fortnite")
+        assert FortniteBuildCostT().translate(stream) == []
+
+    def test_chain_ids_unique(self):
+        from v5.src.interfaces.translation import FortniteBuildCostT
+        stream = self._fn_stream(n_build=6, n_other=40)
+        chains = FortniteBuildCostT().translate(stream)
+        ids = [c.chain_id for c in chains]
+        assert len(ids) == len(set(ids)), "Duplicate ME-FN-1 chain IDs"
+
+    def test_me_fn1_registry_uses_build_cost_t(self):
+        from v5.src.interfaces.translation import (
+            DOMAIN_T_ME_FN1,
+            DOMAIN_T_STUBS,
+            FortniteBuildCostT,
+        )
+        assert isinstance(DOMAIN_T_ME_FN1["fortnite"], FortniteBuildCostT)
+        # Other cells unchanged
+        for cell in ["nba", "csgo", "rocket_league", "hearthstone"]:
+            assert type(DOMAIN_T_ME_FN1[cell]) is type(DOMAIN_T_STUBS[cell])
+
+    def test_me_fn1_distinct_from_storm_t(self):
+        """FortniteBuildCostT and FortniteT should produce disjoint trigger types."""
+        from v5.src.interfaces.translation import FortniteBuildCostT, FortniteT
+        stream = self._fn_stream_with_triggers()
+        build_chains = FortniteBuildCostT().translate(stream)
+        storm_chains = FortniteT().translate(stream)
+        build_trigger_types = {c.chain_metadata["trigger_type"] for c in build_chains}
+        storm_trigger_types = {c.chain_metadata["trigger_type"] for c in storm_chains}
+        # Build triggers (build_decision, resource_spend, resource_budget)
+        # must not overlap with storm triggers (zone_enter, zone_exit, position_commit)
+        assert build_trigger_types.isdisjoint(storm_trigger_types)

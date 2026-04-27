@@ -187,6 +187,7 @@ FORTNITE_MOCK_EVENT_TYPES = [
     "resource_gain",         # materials gathered
     "resource_spend",        # materials used in builds
     "resource_budget",       # low-material budget decision (v1.1)
+    "build_decision",        # explicit build-placement decision (ME-FN-1)
     "position_commit",       # high ground / position decision
     "ability_use",           # consumable / utility use
     "item_use",              # medkit, shields, etc.

@@ -4,6 +4,10 @@ v5 Phase D evaluation entry point.
 Runs the full evaluation pipeline across all five cells:
   real data (or mock) → T → Gate 2 → PromptBuilder → Haiku API → McNemar → report
 
+CF-3=A: 1× shuffled-event control per real chain evaluated in parallel.
+Primary McNemar: real chains (GT="yes"). Shuffle-control McNemar: shuffled
+chains (GT="no"). Both reported together. Use --no-shuffle to skip controls.
+
 Requires ANTHROPIC_API_KEY in environment for real evaluation.
 Use --dry-run for a zero-cost integration check with mock API responses.
 
@@ -12,19 +16,20 @@ Usage
 # Dry run (no API spend, deterministic responses):
   python -m v5.run_eval --dry-run --output v5/RESULTS/eval_dry_run.json
 
-# Real evaluation (requires ANTHROPIC_API_KEY, ~$15 for 1,200 chains/cell × 5 cells):
+# Real evaluation (~$15 for 1,200 chains/cell × 5 cells × 2 calls + controls):
   python -m v5.run_eval --output v5/RESULTS/eval_phase_d.json
 
 # Single cell only:
   python -m v5.run_eval --cells nba --dry-run
 
-# Force mock data even if credentials are present:
-  python -m v5.run_eval --force-mock --dry-run
+# Skip CF-3 shuffled controls:
+  python -m v5.run_eval --no-shuffle --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -36,6 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger("v5.run_eval")
 
 ALL_CELLS = ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
+_SHUFFLE_SEED = 42  # deterministic CF-3=A controls
 
 
 def run_eval(
@@ -43,6 +49,7 @@ def run_eval(
     output_path: Path | None = None,
     dry_run: bool = False,
     force_mock: bool = False,
+    include_shuffle: bool = True,
 ) -> bool:
     from v5.src.cells.csgo.pipeline import CSGOPipeline
     from v5.src.cells.fortnite.pipeline import FortnitePipeline
@@ -50,9 +57,12 @@ def run_eval(
     from v5.src.cells.nba.pipeline import NBAPipeline
     from v5.src.cells.rocket_league.pipeline import RocketLeaguePipeline
     from v5.src.common.config import load_cell_configs, load_harness_config
+    from v5.src.harness.actionables import compute_retention_rate
     from v5.src.harness.cell_runner import CellRunner
+    from v5.src.harness.mcnemar import McnemarResult, run_mcnemar
     from v5.src.harness.model_evaluator import HAIKU_MODEL, ModelEvaluator
     from v5.src.harness.prompts import PER_CELL_PROMPT_BUILDERS
+    from v5.src.harness.scoring import extract_binary_vectors, score_batch
     from v5.src.interfaces.chain_builder import FixedPerCellChainBuilder
     from v5.src.interfaces.translation import DOMAIN_T_STUBS
 
@@ -66,8 +76,6 @@ def run_eval(
         "rocket_league": RocketLeaguePipeline,
         "hearthstone": HearthstonePipeline,
     }
-
-    # Per-cell N values from harness.yaml
     chain_lengths = {
         "fortnite": 8, "nba": 5, "csgo": 10,
         "rocket_league": 12, "hearthstone": 6,
@@ -81,16 +89,19 @@ def run_eval(
         allowed_predictions=["yes", "no"],
     )
 
+    # Primary eval accumulators (real chains, GT="yes")
     streams_by_cell: dict = {}
     baseline_responses: dict = {}
     intervention_responses: dict = {}
     ground_truths: dict = {}
 
+    # CF-3=A shuffle-control accumulators (shuffled chains, GT="no")
+    shuffle_results: dict[str, McnemarResult] = {}
+
     for cell in cells:
         if cell not in pipeline_map:
             logger.warning(f"Unknown cell '{cell}', skipping")
             continue
-
         config = cell_configs.get(cell)
         if config is None:
             logger.error(f"No config for cell '{cell}'")
@@ -100,24 +111,23 @@ def run_eval(
         pipeline = pipeline_map[cell](config=config)
         streams = pipeline.run(force_mock=force_mock or dry_run)
         streams_by_cell[cell] = streams
-        logger.info(f"[{cell}] {len(streams)} streams, "
-                    f"{sum(len(s) for s in streams)} events")
+        logger.info(
+            f"[{cell}] {len(streams)} streams, "
+            f"{sum(len(s) for s in streams)} events"
+        )
 
-        # Register real T
         t_fn = DOMAIN_T_STUBS.get(cell)
         if t_fn is None:
             logger.error(f"No T for cell '{cell}'")
             continue
         runner.register_cell(cell, t_fn)
 
-        # Translate → Gate 2 → build prompts
+        # Translate → chain_builder → Gate 2
         logger.info(f"[{cell}] Translating streams to chains...")
         candidates = []
         for stream in streams:
             candidates.extend(t_fn.translate(stream))
         chains = chain_builder.build_from_candidates(candidates, cell=cell)
-
-        from v5.src.harness.actionables import compute_retention_rate
         retention = compute_retention_rate(chains, floor=harness_config.gate2_retention_floor)
         chains_passed = [c for c in chains if c.is_actionable]
         logger.info(
@@ -125,9 +135,8 @@ def run_eval(
             f"{len(chains_passed)} post-Gate2 "
             f"(retention {retention['retention_rate']:.1%})"
         )
-
         if not chains_passed:
-            logger.warning(f"[{cell}] No chains passed Gate 2, skipping evaluation")
+            logger.warning(f"[{cell}] No chains passed Gate 2, skipping")
             continue
 
         builder_cls = PER_CELL_PROMPT_BUILDERS.get(cell)
@@ -135,18 +144,60 @@ def run_eval(
             logger.error(f"No PromptBuilder for cell '{cell}'")
             continue
         prompt_builder = builder_cls()
-        pairs = [prompt_builder.build(c) for c in chains_passed]
 
+        # --- Primary evaluation (real chains, GT="yes") ----------------------
+        pairs_real = [prompt_builder.build(c) for c in chains_passed]
         logger.info(
-            f"[{cell}] Evaluating {len(pairs)} prompt pairs "
+            f"[{cell}] Evaluating {len(pairs_real)} real pairs "
             f"({'dry-run' if dry_run else HAIKU_MODEL})..."
         )
-        _, b_responses, i_responses = evaluator.evaluate_pairs(pairs)
-        baseline_responses[cell] = b_responses
-        intervention_responses[cell] = i_responses
+        _, b_real, i_real = evaluator.evaluate_pairs(pairs_real)
+        baseline_responses[cell] = b_real
+        intervention_responses[cell] = i_real
         ground_truths[cell] = ["yes"] * len(chains_passed)
 
-    logger.info("Running McNemar analysis across all cells...")
+        # --- CF-3=A: shuffled-control evaluation (GT="no") ------------------
+        if include_shuffle:
+            shuffled = chain_builder.shuffle_chains(
+                chains_passed, seed=_SHUFFLE_SEED, n_shuffles=1
+            )
+            if shuffled:
+                pairs_shuf = [prompt_builder.build(c) for c in shuffled]
+                logger.info(
+                    f"[{cell}] CF-3=A: evaluating {len(pairs_shuf)} shuffled "
+                    f"control pairs..."
+                )
+                _, b_shuf, i_shuf = evaluator.evaluate_pairs(pairs_shuf)
+                gt_shuf = ["no"] * len(shuffled)
+
+                b_scores = score_batch(shuffled, gt_shuf, b_shuf)
+                i_scores = score_batch(shuffled, gt_shuf, i_shuf)
+                b_vec, i_vec = extract_binary_vectors(b_scores, i_scores)
+
+                if len(b_vec) >= harness_config.min_discordant_pairs:
+                    shuf_mcnemar = run_mcnemar(
+                        baseline_correct=b_vec,
+                        intervention_correct=i_vec,
+                        cell=cell,
+                        alpha=harness_config.alpha,
+                        bonferroni_divisor=harness_config.bonferroni_divisor,
+                        continuity_correction=harness_config.continuity_correction,
+                        bootstrap_iterations=harness_config.bootstrap_iterations,
+                        bootstrap_seed=harness_config.bootstrap_seed,
+                        min_discordant_pairs=harness_config.min_discordant_pairs,
+                    )
+                    shuffle_results[cell] = shuf_mcnemar
+                    logger.info(
+                        f"[{cell}] CF-3=A shuffle McNemar: {shuf_mcnemar.summary()}"
+                    )
+                else:
+                    logger.warning(
+                        f"[{cell}] CF-3=A: too few non-abstain pairs "
+                        f"({len(b_vec)}) for shuffle McNemar"
+                    )
+
+    # Primary McNemar across all cells
+    logger.info("Running primary McNemar analysis across all cells...")
     report = runner.run(
         streams_by_cell,
         baseline_responses=baseline_responses,
@@ -154,40 +205,82 @@ def run_eval(
         ground_truths=ground_truths,
     )
 
-    _print_eval_summary(report)
+    _print_eval_summary(report, shuffle_results)
 
     if output_path:
-        report.save(output_path)
+        _save_report(report, shuffle_results, output_path)
         logger.info(f"Report saved to {output_path}")
 
-    # Return True only if all cells ran McNemar (even non-significant results are OK)
     return all(r.mcnemar is not None for r in report.cells)
 
 
-def _print_eval_summary(report) -> None:
+def _print_eval_summary(report, shuffle_results: dict) -> None:
     print(f"\n{'='*70}")
     print(f"v5 PHASE D EVALUATION — {report.run_id}")
     print(f"{'='*70}")
+    print("  PRIMARY McNemar (real chains, GT=yes):")
     for r in report.cells:
         if r.mcnemar:
             m = r.mcnemar
-            sig = "**SIGNIFICANT**" if m.significant else "not significant"
+            sig = "**SIG**" if m.significant else "n.s."
             print(
-                f"  [{r.cell:<14}] chains={r.n_chains_post_gate2:>5} "
+                f"    [{r.cell:<14}] n={r.n_chains_post_gate2:>5} "
                 f"b={m.b:>4} c={m.c:>4} "
-                f"p_corr={m.p_value_corrected:.4f} h={m.effect_size_h:+.4f} "
-                f"→ {sig}"
+                f"p_corr={m.p_value_corrected:.4f} h={m.effect_size_h:+.4f} {sig}"
             )
         else:
             errs = "; ".join(r.errors[:2]) if r.errors else "no responses"
-            print(f"  [{r.cell:<14}] SKIPPED ({errs})")
+            print(f"    [{r.cell:<14}] SKIPPED ({errs})")
+
+    if shuffle_results:
+        print("\n  CF-3=A SHUFFLE CONTROL McNemar (shuffled chains, GT=no):")
+        for cell, m in shuffle_results.items():
+            sig = "**SIG**" if m.significant else "n.s."
+            print(
+                f"    [{cell:<14}] n={m.n_chains:>5} "
+                f"b={m.b:>4} c={m.c:>4} "
+                f"p_corr={m.p_value_corrected:.4f} h={m.effect_size_h:+.4f} {sig}"
+            )
+        # Sanity: constraint context should NOT cause a large effect on shuffled chains
+        # Large significant result here may indicate prompt leakage (cf. CF-4=B check)
+        sig_shuffle = [cell for cell, m in shuffle_results.items() if m.significant]
+        if sig_shuffle:
+            print(
+                f"\n  WARNING: CF-3=A significant for {sig_shuffle}. "
+                "Review prompt content for constraint-context leakage."
+            )
 
     agg = report.aggregate
     if agg:
-        print(f"\n  Pooled: n_cells={agg.get('n_cells',0)} "
-              f"significant={agg.get('n_cells_significant',0)} "
-              f"pooled_p={agg.get('pooled_p', 1.0):.4f}")
+        print(
+            f"\n  Pooled primary: cells={agg.get('n_cells',0)} "
+            f"significant={agg.get('n_cells_significant',0)} "
+            f"pooled_p={agg.get('pooled_p', 1.0):.4f}"
+        )
     print(f"{'='*70}\n")
+
+
+def _save_report(report, shuffle_results: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = report.to_dict()
+    data["cf3_shuffle_control"] = {
+        cell: {
+            "n_shuffled": m.n_chains,
+            "b": m.b,
+            "c": m.c,
+            "statistic": m.statistic,
+            "p_value": m.p_value,
+            "p_value_corrected": m.p_value_corrected,
+            "significant": m.significant,
+            "effect_size_h": m.effect_size_h,
+            "ci_lower": m.ci_lower,
+            "ci_upper": m.ci_upper,
+            "summary": m.summary(),
+        }
+        for cell, m in shuffle_results.items()
+    }
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
 
 
 def main():
@@ -208,6 +301,10 @@ def main():
         "--force-mock", action="store_true",
         help="Use mock event data even if real credentials are present"
     )
+    parser.add_argument(
+        "--no-shuffle", action="store_true",
+        help="Skip CF-3=A shuffled-control evaluation"
+    )
     args = parser.parse_args()
 
     if not args.dry_run:
@@ -225,6 +322,7 @@ def main():
         output_path=args.output,
         dry_run=args.dry_run,
         force_mock=args.force_mock,
+        include_shuffle=not args.no_shuffle,
     )
     sys.exit(0 if success else 1)
 
