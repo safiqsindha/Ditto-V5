@@ -116,6 +116,7 @@ class HearthstonePipeline(BasePipeline):
         Generate mock Hearthstone event streams.
         300 Legend games, ~80 events per game
         (typical HS game ~10-15 turns × 5-8 decisions/turn).
+        Events carry phase="turn_N" so HearthstoneT can group by turn.
         """
         streams = []
         n_top = int(self.config.sample_target * 0.40)    # legend 1-100
@@ -135,6 +136,7 @@ class HearthstonePipeline(BasePipeline):
                 "format": "standard",
                 "year": "2024",
             })
+            _stamp_hs_turns(stream, n_turns=14)
             streams.append(stream)
 
         for i in range(n_mid):
@@ -151,6 +153,7 @@ class HearthstonePipeline(BasePipeline):
                 "format": "standard",
                 "year": "2024",
             })
+            _stamp_hs_turns(stream, n_turns=14)
             streams.append(stream)
 
         logger.info(f"[hearthstone] Generated {len(streams)} mock streams")
@@ -193,3 +196,14 @@ HS_MOCK_EVENT_TYPES = [
     "zone_enter",            # playing into opponent's zone
     "concede",               # concession (rare, but decision event)
 ]
+
+
+def _stamp_hs_turns(stream, n_turns: int = 14) -> None:
+    """Assign phase='turn_N' to events so HearthstoneT can group by turn."""
+    n = len(stream.events)
+    if n == 0:
+        return
+    per_turn = max(1, n // n_turns)
+    for idx, ev in enumerate(stream.events):
+        turn = min(n_turns, idx // per_turn + 1)
+        ev.phase = f"turn_{turn}"

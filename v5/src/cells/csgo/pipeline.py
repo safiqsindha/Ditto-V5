@@ -124,6 +124,7 @@ class CSGOPipeline(BasePipeline):
         Generate mock CS2 event streams.
         150 tournament maps, ~300 events per map (full match ~2700 ticks,
         filtered to ~300 actionable decision events).
+        Events carry location_context["round"] so CSGOT can group by round.
         """
         streams = []
         events_per_event_group = {
@@ -150,6 +151,7 @@ class CSGOPipeline(BasePipeline):
                             "de_nuke", "de_overpass", "de_ancient"][j % 6],
                     "format": "CS2",
                 })
+                _stamp_csgo_rounds(stream, n_rounds=30)
                 streams.append(stream)
                 i += 1
         logger.info(f"[csgo] Generated {len(streams)} mock streams")
@@ -182,3 +184,14 @@ CSGO_MOCK_EVENT_TYPES = [
     "risk_reject",           # passive hold
     "strategy_adapt",        # mid-round call change
 ]
+
+
+def _stamp_csgo_rounds(stream, n_rounds: int = 30) -> None:
+    """Distribute events across rounds so CSGOT can group by round."""
+    n = len(stream.events)
+    if n == 0:
+        return
+    per_round = max(1, n // n_rounds)
+    for idx, ev in enumerate(stream.events):
+        rnum = min(n_rounds - 1, idx // per_round)
+        ev.location_context["round"] = rnum

@@ -30,7 +30,7 @@ ALL_CELLS = ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
 
 def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
     from v5.src.common.config import load_cell_configs, load_harness_config
-    from v5.src.pilot.mock_t import MockT
+    from v5.src.interfaces.translation import DOMAIN_T_STUBS
     from v5.src.pilot.validator import PilotValidator
 
     cell_configs = load_cell_configs()
@@ -74,9 +74,14 @@ def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
         logger.info(f"  {cell}: {len(streams)} streams, "
                     f"{sum(len(s) for s in streams)} events")
 
-        validator.register_cell(cell, MockT(cell=cell))
+        # Phase B complete — register real T for each cell
+        t_fn = DOMAIN_T_STUBS.get(cell)
+        if t_fn is None:
+            logger.error(f"No T registered for cell '{cell}'")
+            continue
+        validator.register_cell(cell, t_fn)
 
-    logger.info("Running pilot validation...")
+    logger.info("Running pilot validation with real T (Phase B)...")
     report = validator.run(streams_by_cell, sample_size=75)
     report.print_summary()
 

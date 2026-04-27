@@ -13,6 +13,7 @@ Variant (C) variable-bounded chain length is flagged for ME-1 micro-experiment.
 from __future__ import annotations
 
 import logging
+import random
 from abc import ABC, abstractmethod
 
 from ..common.schema import ChainCandidate, EventStream
@@ -194,6 +195,42 @@ class FixedPerCellChainBuilder(ChainBuilder):
                 },
             ))
         return chains
+
+    def shuffle_chains(
+        self,
+        chains: list[ChainCandidate],
+        seed: int | None = None,
+        n_shuffles: int = 1,
+    ) -> list[ChainCandidate]:
+        """
+        CF-3=A: generate one shuffled-event control per real chain.
+
+        Returns only the shuffled controls; caller is responsible for
+        appending them to the real chains for null-distribution comparison.
+        Events within each chain are randomly reordered; chain_id, game_id,
+        and cell are preserved. Shuffled chains are tagged in chain_metadata
+        with cf3="shuffled_control".
+        """
+        rng = random.Random(seed)
+        shuffled: list[ChainCandidate] = []
+        for chain in chains:
+            for k in range(n_shuffles):
+                events = list(chain.events)
+                rng.shuffle(events)
+                shuffled.append(ChainCandidate(
+                    chain_id=f"{chain.chain_id}_shuf{k:02d}",
+                    game_id=chain.game_id,
+                    cell=chain.cell,
+                    events=events,
+                    chain_metadata={
+                        **chain.chain_metadata,
+                        "parent_chain_id": chain.chain_id,
+                        "shuffled": True,
+                        "shuffle_idx": k,
+                        "cf3": "shuffled_control",
+                    },
+                ))
+        return shuffled
 
     # Legacy interface compatibility — accepts either a list of ChainCandidates
     # or a list of EventStreams. The runner uses build_from_streams() directly;

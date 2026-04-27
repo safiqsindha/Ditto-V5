@@ -94,6 +94,7 @@ class NBAPipeline(BasePipeline):
         Generate mock NBA play-by-play event streams.
         300 games: 240 regular season + 60 playoff.
         ~180 events per game (NBA average ~220 plays/game, filtered to decision events).
+        Events carry location_context["period"] so NBAT can group by quarter.
         """
         streams = []
         n_rs = int(self.config.sample_target * 0.80)
@@ -109,18 +110,20 @@ class NBAPipeline(BasePipeline):
                 seed=i,
             )
             stream.metadata.update({"phase": "regular_season", "season": "2023-24"})
+            _stamp_nba_periods(stream, n_periods=4)
             streams.append(stream)
 
         for i in range(n_po):
             stream = self._make_mock_stream(
                 game_id=f"mock_nba_po_{i:04d}",
                 cell="nba",
-                n_events=200,  # playoffs slightly longer
+                n_events=200,
                 event_types=NBA_MOCK_EVENT_TYPES,
                 actors=[f"player_{j}" for j in range(10)],
                 seed=10000 + i,
             )
             stream.metadata.update({"phase": "playoffs", "season": "2023-24"})
+            _stamp_nba_periods(stream, n_periods=4)
             streams.append(stream)
 
         logger.info(f"[nba] Generated {len(streams)} mock streams")
@@ -157,3 +160,14 @@ NBA_MOCK_EVENT_TYPES = [
     "ability_use",           # free throw (set piece)
     "disengage_decision",    # passing up shot opportunity
 ]
+
+
+def _stamp_nba_periods(stream, n_periods: int = 4) -> None:
+    """Distribute events across periods so NBAT can group by quarter."""
+    n = len(stream.events)
+    if n == 0:
+        return
+    per_period = max(1, n // n_periods)
+    for idx, ev in enumerate(stream.events):
+        period = min(n_periods, idx // per_period + 1)
+        ev.location_context["period"] = period

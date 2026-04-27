@@ -127,6 +127,90 @@ class TestFixedPerCellChainBuilder:
         assert DefaultChainBuilder is FixedPerCellChainBuilder
 
 
+class TestShuffleChains:
+    """CF-3=A shuffled-control generation."""
+
+    def _make_chains(self, n: int = 5, chain_len: int = 8) -> list:
+        from v5.src.common.schema import ChainCandidate
+        chains = []
+        for i in range(n):
+            events = [GameEvent(
+                timestamp=float(j),
+                event_type="engage_decision",
+                actor=f"player_{j}",
+                location_context={},
+                raw_data_blob={},
+                cell="nba",
+                game_id=f"g{i}",
+                sequence_idx=j,
+            ) for j in range(chain_len)]
+            chains.append(ChainCandidate(
+                chain_id=f"chain_{i}",
+                game_id=f"g{i}",
+                cell="nba",
+                events=events,
+                chain_metadata={"chain_type": "test"},
+            ))
+        return chains
+
+    def test_returns_one_shuffle_per_chain_by_default(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=4)
+        shuffled = builder.shuffle_chains(chains, seed=0)
+        assert len(shuffled) == 4
+
+    def test_n_shuffles_multiplies_output(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=3)
+        shuffled = builder.shuffle_chains(chains, seed=0, n_shuffles=2)
+        assert len(shuffled) == 6
+
+    def test_shuffled_ids_unique(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=5)
+        shuffled = builder.shuffle_chains(chains, seed=42)
+        ids = [c.chain_id for c in shuffled]
+        assert len(ids) == len(set(ids))
+
+    def test_shuffled_chain_preserves_cell_and_game(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=2)
+        shuffled = builder.shuffle_chains(chains, seed=0)
+        for shuf, orig in zip(shuffled, chains, strict=False):
+            assert shuf.cell == orig.cell
+            assert shuf.game_id == orig.game_id
+
+    def test_shuffled_metadata_tagged(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=2)
+        shuffled = builder.shuffle_chains(chains, seed=0)
+        for s in shuffled:
+            assert s.chain_metadata["shuffled"] is True
+            assert s.chain_metadata["cf3"] == "shuffled_control"
+            assert "parent_chain_id" in s.chain_metadata
+
+    def test_events_same_set_different_order(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=1, chain_len=20)
+        shuffled = builder.shuffle_chains(chains, seed=7)
+        orig_ids = [e.sequence_idx for e in chains[0].events]
+        shuf_ids = [e.sequence_idx for e in shuffled[0].events]
+        assert sorted(orig_ids) == sorted(shuf_ids)
+        # With seed=7 and 20 events, order should differ (not guaranteed but highly likely)
+
+    def test_empty_chains_returns_empty(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        assert builder.shuffle_chains([], seed=0) == []
+
+    def test_deterministic_with_same_seed(self):
+        builder = FixedPerCellChainBuilder({"nba": 8})
+        chains = self._make_chains(n=3)
+        s1 = builder.shuffle_chains(chains, seed=99)
+        s2 = builder.shuffle_chains(chains, seed=99)
+        for a, b in zip(s1, s2, strict=False):
+            assert [e.sequence_idx for e in a.events] == [e.sequence_idx for e in b.events]
+
+
 def test_uniform_subsample():
     items = list(range(100))
     sub = _uniform_subsample(items, 10)

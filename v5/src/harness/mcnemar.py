@@ -109,8 +109,9 @@ def run_mcnemar(
 
     # Bonferroni correction
     alpha_corrected = alpha / bonferroni_divisor
-    p_corrected = min(p_value * bonferroni_divisor, 1.0)
-    significant = p_corrected < alpha
+    p_value = float(p_value)          # scipy returns np.float64; ensure plain float
+    p_corrected = float(min(p_value * bonferroni_divisor, 1.0))
+    significant = bool(p_corrected < alpha)  # prevent np.bool_ leaking into JSON
 
     # Cohen's h effect size (arcsin transformation of proportion difference)
     p1 = c / n if n > 0 else 0.0  # P(intervention correct, baseline wrong)
