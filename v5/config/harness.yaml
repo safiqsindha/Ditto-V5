@@ -4,7 +4,7 @@
 
 harness:
   version: "1.1"
-  cells: ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
+  cells: ["fortnite", "nba", "csgo", "rocket_league", "poker"]
 
   mcnemar:
     alpha: 0.05
@@ -39,7 +39,7 @@ harness:
       nba: 5              # N-3 locked: one full possession + lead-in
       csgo: 10            # C-3 locked: one full round at round-level granularity
       rocket_league: 12   # R-3 locked: one play (6-8 hits + 4-6 boost events)
-      hearthstone: 6      # H-3 locked: median turn length
+      poker: 8            # P-3 locked: player-hand window (matches FortniteT N)
     overlap: false        # non-overlapping (sliding window with step = chain_length)
     sampling: "sequential" # within-game sequential; uniform subsample to hit n_chains target
 

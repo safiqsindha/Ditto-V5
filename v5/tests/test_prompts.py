@@ -87,10 +87,10 @@ class TestPromptBuilder:
 
 class TestPerCellBuilders:
     def test_all_five_builders_registered(self):
-        expected = {"fortnite", "nba", "csgo", "rocket_league", "hearthstone"}
+        expected = {"fortnite", "nba", "csgo", "rocket_league", "poker"}
         assert set(PER_CELL_PROMPT_BUILDERS.keys()) == expected
 
-    @pytest.mark.parametrize("cell", ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"])
+    @pytest.mark.parametrize("cell", ["fortnite", "nba", "csgo", "rocket_league", "poker"])
     def test_builder_has_correct_cell(self, cell):
         builder = PER_CELL_PROMPT_BUILDERS[cell]()
         assert builder.cell == cell

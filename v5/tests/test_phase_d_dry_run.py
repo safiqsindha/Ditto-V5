@@ -99,9 +99,9 @@ class TestPhaseDChainGeneration:
             "nba": _nba_stream(),
             "csgo": _csgo_stream(),
             "rocket_league": EventStream(game_id="rl1", cell="rocket_league"),
-            "hearthstone": EventStream(game_id="hs1", cell="hearthstone"),
+            "poker": EventStream(game_id="pk1", cell="poker"),
         }
-        # Add a couple events to fortnite/rl/hs streams so T has something to work with
+        # Add events to fortnite / rl streams so T has something to work with
         for ev_type, cell in [
             ("zone_enter", "fortnite"), ("objective_capture", "rocket_league"),
         ]:
@@ -112,14 +112,17 @@ class TestPhaseDChainGeneration:
                     actor="p1", location_context={}, raw_data_blob={},
                     cell=cell, game_id=s.game_id, sequence_idx=i,
                 ))
-        hs = cell_streams["hearthstone"]
-        for i in range(20):
-            hs.append(GameEvent(
-                timestamp=float(i), event_type="engage_decision",
-                actor="p1", location_context={}, raw_data_blob={},
-                cell="hearthstone", game_id=hs.game_id, sequence_idx=i,
-                phase=f"turn_{(i // 5) + 1}",
-            ))
+        # Poker: 6 actors × 5 events each so PokerT produces chains
+        pk = cell_streams["poker"]
+        for actor_idx in range(6):
+            for j in range(5):
+                pk.append(GameEvent(
+                    timestamp=float(actor_idx * 10 + j),
+                    event_type="engage_decision",
+                    actor=f"actor_{actor_idx}", location_context={}, raw_data_blob={},
+                    cell="poker", game_id=pk.game_id,
+                    sequence_idx=actor_idx * 10 + j,
+                ))
 
         for cell, stream in cell_streams.items():
             t = DOMAIN_T_STUBS[cell]

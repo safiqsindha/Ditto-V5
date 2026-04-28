@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from v5.src.cells.csgo.pipeline import CSGOPipeline
 from v5.src.cells.fortnite.pipeline import FortnitePipeline
-from v5.src.cells.hearthstone.pipeline import HearthstonePipeline
+from v5.src.cells.poker.pipeline import PokerPipeline
 from v5.src.cells.nba.pipeline import NBAPipeline
 from v5.src.cells.rocket_league.pipeline import RocketLeaguePipeline
 from v5.src.common.config import load_cell_configs
@@ -344,31 +344,44 @@ class TestRLRealFetch:
 # Hearthstone — HSReplay API + hslog
 # ---------------------------------------------------------------------------
 
-class TestHSRealFetch:
-    """Hearthstone is mock-only (no public bulk replay API)."""
+class TestPokerRealFetch:
+    """Poker: PHH public dataset, no auth required. Real fetch tested at parse layer."""
 
-    def test_fetch_always_returns_empty(self, cfgs, tmp_path):
-        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
+    def test_fetch_returns_list(self, cfgs, tmp_path, monkeypatch):
+        """fetch() returns a list (may be empty if network unavailable in CI)."""
+        import v5.src.cells.poker.pipeline as pm
+        monkeypatch.setattr(pm, "_PHH_TARBALL_URL", "http://localhost:0/nope")
+        pipeline = PokerPipeline(config=cfgs["poker"], data_root=tmp_path)
         paths = pipeline.fetch()
-        assert paths == []
+        assert isinstance(paths, list)
 
-    def test_parse_always_returns_empty(self, cfgs, tmp_path):
-        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
-        records = pipeline.parse([tmp_path / "nonexistent.hsreplay"])
+    def test_parse_returns_empty_without_pokerkit(self, cfgs, tmp_path, monkeypatch):
+        """parse() returns [] gracefully when pokerkit is absent."""
+        import builtins
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "pokerkit":
+                raise ImportError("mocked")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        pipeline = PokerPipeline(config=cfgs["poker"], data_root=tmp_path)
+        records = pipeline.parse([tmp_path / "nonexistent.phh"])
         assert records == []
 
     def test_generate_mock_data_hits_sample_target(self, cfgs, tmp_path):
-        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
+        pipeline = PokerPipeline(config=cfgs["poker"], data_root=tmp_path)
         pipeline.config.sample_target = 10
         streams = pipeline.generate_mock_data()
         assert len(streams) == 10
 
-    def test_mock_streams_have_turn_phases(self, cfgs, tmp_path):
-        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
+    def test_mock_streams_have_poker_streets(self, cfgs, tmp_path):
+        pipeline = PokerPipeline(config=cfgs["poker"], data_root=tmp_path)
         pipeline.config.sample_target = 2
         streams = pipeline.generate_mock_data()
         phases = {e.phase for s in streams for e in s.events}
-        assert any(p.startswith("turn_") for p in phases)
+        assert "preflop" in phases
 
 
 # ---------------------------------------------------------------------------

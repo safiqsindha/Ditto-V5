@@ -7,7 +7,7 @@ into ChainCandidate objects. Each domain cell has its own T implementation.
 Phase B decisions locked 2026-04-27 (both authors):
   CF-1=A (natural language constraint), CF-2=D (binary classify),
   CF-3=A (shuffled controls), CF-4=B (domain-only provenance)
-  Per-cell N: fortnite=8, nba=5, csgo=10, rocket_league=12, hearthstone=6
+  Per-cell N: fortnite=8, nba=5, csgo=10, rocket_league=12, poker=8
 
 To register T with CellRunner:
   runner.register_cell(cell_id, MyT())
@@ -460,64 +460,12 @@ class RocketLeaguePlayerT(TranslationFunction):
 
 
 # ---------------------------------------------------------------------------
-# Hearthstone T
-# Phase B decisions: H-1 mana-cost + turn-alternation + board-state,
-#   H-2 all actions within one player's turn, H-3 N=6
+# Poker T
+# Phase B decisions: P-1 player-hand pair, P-2 decision events only,
+#   P-3 N=8, P-4 ≥3 actions filter, P-5 NLHE constraint, P-6 overrides
 # ---------------------------------------------------------------------------
 
-class HearthstoneT(TranslationFunction):
-    """
-    Extract per-turn action sequences from a Hearthstone event stream.
-
-    The HS extractor stamps each event with phase=f"turn_{n}". T groups
-    events by their turn phase and emits one ChainCandidate per turn.
-    ChainBuilder trims to N=6.
-
-    Constraint (H-1): mana-cost rule (can't overspend available mana per
-    turn) + turn-alternation (only active player acts) + board-state rule
-    (minions at 0 HP are removed).
-    """
-
-    @property
-    def cell(self) -> str:
-        return "hearthstone"
-
-    def translate(self, stream: EventStream) -> list[ChainCandidate]:
-        events = stream.events
-        if not events:
-            return []
-
-        by_turn: dict[str, list[GameEvent]] = defaultdict(list)
-        for ev in events:
-            turn_key = ev.phase or "turn_0"
-            by_turn[turn_key].append(ev)
-
-        chains: list[ChainCandidate] = []
-        for turn_key in sorted(by_turn, key=_turn_sort_key):
-            t_events = by_turn[turn_key]
-            if not t_events:
-                continue
-            chains.append(ChainCandidate(
-                chain_id=self._chain_id(stream.game_id, f"hs_{turn_key}"),
-                game_id=stream.game_id,
-                cell="hearthstone",
-                events=t_events,
-                chain_metadata={
-                    "chain_type": "per_turn",
-                    "turn": turn_key,
-                    "n_events": len(t_events),
-                },
-            ))
-
-        return chains
-
-
-def _turn_sort_key(turn_key: str) -> int:
-    """Sort 'turn_3' before 'turn_10' numerically."""
-    try:
-        return int(turn_key.split("_")[-1])
-    except (ValueError, IndexError):
-        return 0
+from ..cells.poker.poker_t import PokerPerSessionT, PokerT  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +477,7 @@ DOMAIN_T_STUBS: dict[str, TranslationFunction] = {
     "nba": NBAT(),
     "csgo": CSGOT(),
     "rocket_league": RocketLeagueT(),
-    "hearthstone": HearthstoneT(),
+    "poker": PokerT(),
 }
 
 # ME-RL-1 variant registry — per-player RL chains (micro-experiment).
@@ -544,4 +492,11 @@ DOMAIN_T_ME_RL1: dict[str, TranslationFunction] = {
 DOMAIN_T_ME_FN1: dict[str, TranslationFunction] = {
     **DOMAIN_T_STUBS,
     "fortnite": FortniteBuildCostT(),
+}
+
+# ME-PK-1 variant registry — per-session stack-evolution chains (micro-experiment).
+# Raises NotImplementedError when translate() is called; scaffolded for future work.
+DOMAIN_T_ME_PK1: dict[str, TranslationFunction] = {
+    **DOMAIN_T_STUBS,
+    "poker": PokerPerSessionT(),
 }

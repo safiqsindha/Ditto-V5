@@ -80,21 +80,19 @@ cells:
     mock_fallback: true
     parser: "rrrocket"
 
-  hearthstone:
-    cell_id: "hearthstone"
-    display_name: "Hearthstone (2024 Legend Ladder)"
-    data_source: "hsreplay_api"
-    rank_filter: "legend"
+  poker:
+    cell_id: "poker"
+    display_name: "Poker (NLHE — Pluribus + WSOP 2023)"
+    data_source: "phh_dataset_v3"
     time_range:
-      start: "2024-01-01"
-      end: "2024-12-31"
+      start: "2019-01-01"
+      end: "2023-12-31"
     sample_target_games: 300
     stratification:
-      - rank_range: "legend_1_100"
-        fraction: 0.40
-      - rank_range: "legend_101_1000"
+      - subset: "pluribus"
         fraction: 0.60
-    env_vars:
-      - HSREPLAY_API_KEY
+      - subset: "wsop-2023-50k"
+        fraction: 0.40
+    env_vars: []
     mock_fallback: true
-    parser: "hslog"
+    parser: "pokerkit"

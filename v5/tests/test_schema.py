@@ -63,7 +63,7 @@ class TestGameEvent:
 
     def test_valid_cells_set(self):
         assert VALID_CELLS == frozenset(
-            ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
+            ["fortnite", "nba", "csgo", "rocket_league", "poker"]
         )
 
 
@@ -88,17 +88,17 @@ class TestEventStream:
 
     def test_jsonl_roundtrip(self, tmp_path):
         original = EventStream(
-            game_id="test_game", cell="hearthstone",
-            metadata={"format": "standard", "rank": "legend"},
+            game_id="test_game", cell="poker",
+            metadata={"subset": "pluribus", "n_players": 6},
         )
         for i in range(10):
             original.append(_ev(
-                cell="hearthstone",
+                cell="poker",
                 game_id="test_game",
                 sequence_idx=i,
                 timestamp=float(i),
-                event_type="draft_pick",
-                location_context={"turn": i // 2},
+                event_type="engage_decision",
+                location_context={"street": "preflop"},
             ))
 
         path = tmp_path / "stream.jsonl"
@@ -107,11 +107,11 @@ class TestEventStream:
 
         loaded = EventStream.from_jsonl(path)
         assert loaded.game_id == "test_game"
-        assert loaded.cell == "hearthstone"
-        assert loaded.metadata == {"format": "standard", "rank": "legend"}
+        assert loaded.cell == "poker"
+        assert loaded.metadata == {"subset": "pluribus", "n_players": 6}
         assert len(loaded) == 10
         assert all(loaded.events[i].sequence_idx == i for i in range(10))
-        assert loaded.events[5].location_context == {"turn": 2}
+        assert loaded.events[5].location_context == {"street": "preflop"}
 
 
 class TestChainCandidate:

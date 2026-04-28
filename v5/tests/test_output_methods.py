@@ -168,7 +168,7 @@ class TestTranslationImplementations:
         ("NBAT", "nba"),
         ("CSGOT", "csgo"),
         ("RocketLeagueT", "rocket_league"),
-        ("HearthstoneT", "hearthstone"),
+        ("PokerT", "poker"),
     ])
     def test_each_t_has_correct_cell_name(self, t_class, cell_name):
         from v5.src.interfaces import translation
@@ -181,7 +181,7 @@ class TestTranslationImplementations:
         ("NBAT", "nba"),
         ("CSGOT", "csgo"),
         ("RocketLeagueT", "rocket_league"),
-        ("HearthstoneT", "hearthstone"),
+        ("PokerT", "poker"),
     ])
     def test_each_t_translate_returns_list(self, t_class, cell_name):
         from v5.src.interfaces import translation
@@ -426,7 +426,7 @@ class TestRocketLeaguePlayerT:
         assert isinstance(DOMAIN_T_ME_RL1["rocket_league"], RocketLeaguePlayerT)
         # Other cells unchanged
         from v5.src.interfaces.translation import DOMAIN_T_STUBS
-        for cell in ["fortnite", "nba", "csgo", "hearthstone"]:
+        for cell in ["fortnite", "nba", "csgo", "poker"]:
             assert type(DOMAIN_T_ME_RL1[cell]) is type(DOMAIN_T_STUBS[cell])
 
 
@@ -548,7 +548,7 @@ class TestFortniteBuildCostT:
         )
         assert isinstance(DOMAIN_T_ME_FN1["fortnite"], FortniteBuildCostT)
         # Other cells unchanged
-        for cell in ["nba", "csgo", "rocket_league", "hearthstone"]:
+        for cell in ["nba", "csgo", "rocket_league", "poker"]:
             assert type(DOMAIN_T_ME_FN1[cell]) is type(DOMAIN_T_STUBS[cell])
 
     def test_me_fn1_distinct_from_storm_t(self):

@@ -4,18 +4,14 @@ Synthetic-fixture extractor tests.
 Tests the actual parsing logic in each cell's extractor against synthetic
 fixtures shaped like real upstream-tool outputs. Catches regressions when
 real data formats drift.
-
-Fixtures live in tests/fixtures/. Hearthstone uses SimpleNamespace mocks
-because hslog produces Python entity-tree objects, not pure JSON.
 """
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 from v5.src.cells.csgo.extractor import CSGOExtractor
 from v5.src.cells.fortnite.extractor import FortniteExtractor
-from v5.src.cells.hearthstone.extractor import HearthstoneExtractor
+from v5.src.cells.poker.extractor import PokerExtractor
 from v5.src.cells.nba.extractor import NBAExtractor
 from v5.src.cells.rocket_league.extractor import RocketLeagueExtractor
 from v5.src.common.schema import EventStream
@@ -231,65 +227,64 @@ class TestRLExtractor:
 
 
 # ---------------------------------------------------------------------------
-# Hearthstone — entity-tree mock (hslog produces Python objects, not JSON)
+# Poker — synthetic PHH-style hand dict
 # ---------------------------------------------------------------------------
 
-def _mock_hs_packet(packet_type: str, entity_id: str = "1", target: str = ""):
-    return SimpleNamespace(
-        type=packet_type,
-        entity=SimpleNamespace(id=entity_id, controller=SimpleNamespace(account_lo="player_1")),
-        target=target,
-        timestamp=0.5,
-        zone=1,
-        packets=[],
-    )
-
-
-def _mock_hs_record(packets: list, game_id: str = "test_hs_001") -> dict:
+def _mock_poker_record(actions: list[str] | None = None, game_id: str = "pk_test_syn") -> dict:
+    if actions is None:
+        actions = [
+            "d dh p0 ??", "d dh p1 ??", "d dh p2 ??",
+            "p2 f",
+            "p0 cbr 300",
+            "p1 cc",
+            "d db 2s3h4d",   # flop
+            "p0 cbr 600",
+            "p1 f",
+        ]
     return {
         "game_id": game_id,
-        "game_tree": SimpleNamespace(
-            game=SimpleNamespace(packets=packets),
-        ),
+        "players": ["actor_0", "actor_1", "actor_2"],
+        "n_players": 3,
+        "starting_stacks": [10000, 10000, 10000],
+        "blinds": [50, 100, 0],
+        "big_blind": 100,
+        "actions": actions,
+        "subset": "pluribus",
     }
 
 
-class TestHSExtractor:
-    def test_parses_simple_packet_stream(self):
-        packets = [
-            _mock_hs_packet("PLAY"),
-            _mock_hs_packet("ATTACK"),
-            _mock_hs_packet("POWER"),
-        ]
-        record = _mock_hs_record(packets)
-        stream = HearthstoneExtractor().extract(record)
-        assert stream.cell == "hearthstone"
-        assert len(stream.events) == 3
+class TestPokerExtractorSynthetic:
+    def test_parses_simple_hand(self):
+        stream = PokerExtractor().extract(_mock_poker_record())
+        assert isinstance(stream, EventStream)
+        assert stream.cell == "poker"
 
-    def test_play_card_becomes_draft_pick(self):
-        packets = [_mock_hs_packet("PLAY")]
-        record = _mock_hs_record(packets)
-        stream = HearthstoneExtractor().extract(record)
-        assert any(e.event_type == "draft_pick" for e in stream.events)
+    def test_player_actions_produce_events(self):
+        stream = PokerExtractor().extract(_mock_poker_record())
+        # p2 f, p0 cbr 300, p1 cc, (flop), p0 cbr 600, p1 f → 5 events
+        assert len(stream.events) == 5
 
-    def test_attack_becomes_engage_decision(self):
-        packets = [_mock_hs_packet("ATTACK")]
-        record = _mock_hs_record(packets)
-        stream = HearthstoneExtractor().extract(record)
-        assert any(e.event_type == "engage_decision" for e in stream.events)
+    def test_fold_is_disengage_decision(self):
+        stream = PokerExtractor().extract(_mock_poker_record())
+        folds = [e for e in stream.events if e.location_context.get("action") == "f"]
+        assert all(e.event_type == "disengage_decision" for e in folds)
 
-    def test_hero_power_becomes_ability_use(self):
-        packets = [_mock_hs_packet("POWER")]
-        record = _mock_hs_record(packets)
-        stream = HearthstoneExtractor().extract(record)
-        assert any(e.event_type == "ability_use" for e in stream.events)
+    def test_raise_is_engage_decision(self):
+        stream = PokerExtractor().extract(_mock_poker_record())
+        raises = [e for e in stream.events if e.location_context.get("action") == "cbr"]
+        assert all(e.event_type == "engage_decision" for e in raises)
 
-    def test_unknown_packet_type_skipped(self):
-        packets = [_mock_hs_packet("UNKNOWN_TYPE")]
-        record = _mock_hs_record(packets)
-        stream = HearthstoneExtractor().extract(record)
-        assert len(stream.events) == 0
+    def test_street_changes_to_flop_after_deal_board(self):
+        stream = PokerExtractor().extract(_mock_poker_record())
+        flop_events = [e for e in stream.events if e.phase == "flop"]
+        assert len(flop_events) >= 1
 
-    def test_empty_record_returns_empty_stream(self):
-        stream = HearthstoneExtractor().extract({"game_id": "x"})
+    def test_actors_match_anonymised_names(self):
+        stream = PokerExtractor().extract(_mock_poker_record())
+        for e in stream.events:
+            assert e.actor in {"actor_0", "actor_1", "actor_2"}
+
+    def test_empty_actions_returns_empty_stream(self):
+        record = _mock_poker_record(actions=[])
+        stream = PokerExtractor().extract(record)
         assert len(stream) == 0

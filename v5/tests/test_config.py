@@ -14,7 +14,7 @@ from v5.src.common.config import (
 class TestCellConfig:
     def test_load_all_five_cells(self):
         configs = load_cell_configs()
-        expected = {"fortnite", "nba", "csgo", "rocket_league", "hearthstone"}
+        expected = {"fortnite", "nba", "csgo", "rocket_league", "poker"}
         assert set(configs.keys()) == expected
 
     def test_each_cell_has_sample_target(self):

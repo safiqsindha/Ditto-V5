@@ -1,7 +1,8 @@
 """
 v5 Phase D evaluation entry point.
 
-Runs the full evaluation pipeline across all five cells:
+Runs the full evaluation pipeline across all five cells
+(fortnite, nba, csgo, rocket_league, poker):
   real data (or mock) → T → Gate 2 → PromptBuilder → Haiku API → McNemar → report
 
 CF-3=A: 1× shuffled-event control per real chain evaluated in parallel.
@@ -46,7 +47,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("v5.run_eval")
 
-ALL_CELLS = ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
+ALL_CELLS = ["fortnite", "nba", "csgo", "rocket_league", "poker"]
 _SHUFFLE_SEED = 42  # deterministic CF-3=A controls
 
 
@@ -59,8 +60,8 @@ def run_eval(
 ) -> bool:
     from v5.src.cells.csgo.pipeline import CSGOPipeline
     from v5.src.cells.fortnite.pipeline import FortnitePipeline
-    from v5.src.cells.hearthstone.pipeline import HearthstonePipeline
     from v5.src.cells.nba.pipeline import NBAPipeline
+    from v5.src.cells.poker.pipeline import PokerPipeline
     from v5.src.cells.rocket_league.pipeline import RocketLeaguePipeline
     from v5.src.common.config import load_cell_configs, load_harness_config
     from v5.src.harness.actionables import compute_retention_rate
@@ -80,11 +81,11 @@ def run_eval(
         "nba": NBAPipeline,
         "csgo": CSGOPipeline,
         "rocket_league": RocketLeaguePipeline,
-        "hearthstone": HearthstonePipeline,
+        "poker": PokerPipeline,
     }
     chain_lengths = {
         "fortnite": 8, "nba": 5, "csgo": 10,
-        "rocket_league": 12, "hearthstone": 6,
+        "rocket_league": 12, "poker": 8,
     }
 
     chain_builder = FixedPerCellChainBuilder(per_cell_chain_length=chain_lengths)

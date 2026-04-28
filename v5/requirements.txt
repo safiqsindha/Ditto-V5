@@ -17,6 +17,9 @@ nba_api>=1.4.0
 # CS:GO/CS2 cell — uses FACEIT API v4 (JSON, no local tooling required)
 # awpy removed: CS2 pipeline switched from HLTV demo parsing to FACEIT JSON API
 
+# Poker cell — official PHH (Poker Hand History) parser
+pokerkit>=0.5.0
+
 # Hearthstone cell
 hearthstone>=2.2.0
 

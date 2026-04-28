@@ -8,7 +8,7 @@ Runs mock data through all five pipelines and validates:
 
 Usage:
   cd /path/to/Ditto-V5
-  python -m v5.run_pilot [--cells fortnite nba csgo rocket_league hearthstone]
+  python -m v5.run_pilot [--cells fortnite nba csgo rocket_league poker]
   python -m v5.run_pilot --output v5/RESULTS/pilot_report.json
 """
 
@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("v5.run_pilot")
 
-ALL_CELLS = ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
+ALL_CELLS = ["fortnite", "nba", "csgo", "rocket_league", "poker"]
 
 
 def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
@@ -39,8 +39,8 @@ def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
     # Import pipelines
     from v5.src.cells.csgo.pipeline import CSGOPipeline
     from v5.src.cells.fortnite.pipeline import FortnitePipeline
-    from v5.src.cells.hearthstone.pipeline import HearthstonePipeline
     from v5.src.cells.nba.pipeline import NBAPipeline
+    from v5.src.cells.poker.pipeline import PokerPipeline
     from v5.src.cells.rocket_league.pipeline import RocketLeaguePipeline
 
     pipeline_map = {
@@ -48,7 +48,7 @@ def run_pilot(cells: list[str], output_path: Path | None = None) -> bool:
         "nba": NBAPipeline,
         "csgo": CSGOPipeline,
         "rocket_league": RocketLeaguePipeline,
-        "hearthstone": HearthstonePipeline,
+        "poker": PokerPipeline,
     }
 
     validator = PilotValidator(gate2_floor=harness_config.gate2_retention_floor)

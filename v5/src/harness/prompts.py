@@ -261,22 +261,26 @@ class RocketLeaguePromptBuilder(PromptBuilder):
         return _CLASSIFY_QUESTION.format(domain="Rocket League")
 
 
-class HearthstonePromptBuilder(PromptBuilder):
-    """H-5 constraint context locked Phase B."""
+class PokerPromptBuilder(PromptBuilder):
+    """P-5 constraint context locked Phase B."""
 
     def __init__(self):
-        super().__init__(cell="hearthstone")
+        super().__init__(cell="poker")
 
     def format_constraint_context(self, chain: ChainCandidate) -> str:
         return (
-            "In Hearthstone, players take alternating turns. Each turn the active "
-            "player gains one mana crystal (max 10) and may play cards costing up to "
-            "the available mana; unspent mana does not carry over. Minions and heroes "
-            "have health; reaching zero health removes them from play."
+            "In No-Limit Texas Hold'em poker, a player may fold, check (only if no "
+            "bet has been made on this street), call the current bet, or bet/raise up "
+            "to the full amount of their remaining chips (their stack). A player may "
+            "not wager more chips than they hold. Blinds are posted before cards are "
+            "dealt and count toward the first betting round. Action proceeds clockwise; "
+            "on post-flop streets the first active player to the left of the dealer "
+            "button acts first. A player who folds may not act again in the hand. At "
+            "showdown the player with the best five-card hand wins the pot."
         )
 
     def format_question(self, chain: ChainCandidate) -> str:
-        return _CLASSIFY_QUESTION.format(domain="Hearthstone")
+        return _CLASSIFY_QUESTION.format(domain="poker")
 
 
 PER_CELL_PROMPT_BUILDERS = {
@@ -284,7 +288,7 @@ PER_CELL_PROMPT_BUILDERS = {
     "nba": NBAPromptBuilder,
     "csgo": CSGOPromptBuilder,
     "rocket_league": RocketLeaguePromptBuilder,
-    "hearthstone": HearthstonePromptBuilder,
+    "poker": PokerPromptBuilder,
 }
 
 

@@ -92,10 +92,10 @@ CELL_ACTIONABLE_OVERRIDES: dict[str, frozenset[str]] = {
         "boost_steal",              # opponent boost pad denial
         "rotation_back",            # defensive rotation decision
     ]),
-    "hearthstone": frozenset([      # H-6 locked
-        "card_play",                # card played from hand
-        "lethal_lining_up",         # lethal setup sequence
-        "mana_curve_choice",        # optimal mana-spend decision
+    "poker": frozenset([             # P-6 locked
+        "pot_odds_decision",        # EV-driven fold / call / raise
+        "stack_pressure",           # short-stack push / fold constraint
+        "hand_strength_commitment", # equity-based commitment to pot
     ]),
 }
 

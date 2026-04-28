@@ -57,8 +57,8 @@ class TestMockT:
         assert t.cell == "fortnite"
 
     def test_chain_events_within_stream(self):
-        stream = _make_stream("hearthstone", n_events=30)
-        t = MockT(cell="hearthstone", window_size=5)
+        stream = _make_stream("poker", n_events=30)
+        t = MockT(cell="poker", window_size=5)
         chains = t.translate(stream)
         for chain in chains:
             assert all(e in stream.events for e in chain.events)
@@ -80,7 +80,7 @@ class TestPilotValidator:
         assert cell_r.retention_rate >= 0.0
 
     def test_five_cells(self):
-        cells = ["fortnite", "nba", "csgo", "rocket_league", "hearthstone"]
+        cells = ["fortnite", "nba", "csgo", "rocket_league", "poker"]
         validator = PilotValidator(gate2_floor=0.50)
         streams = {}
         for c in cells:
