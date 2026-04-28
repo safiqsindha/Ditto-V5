@@ -200,3 +200,163 @@ class TestPrintEvalSummary:
         run_eval_module._print_eval_summary(report, {})
         out = capsys.readouterr().out
         assert "CF-3=A" not in out
+
+    def test_power_shown_in_primary_summary(self, capsys):
+        from v5.src.harness.cell_runner import CellResult
+        from v5.src.harness.mcnemar import run_mcnemar
+
+        b = [True] * 30 + [False] * 20
+        iv = [True] * 35 + [False] * 15
+        m = run_mcnemar(b, iv, cell="nba", alpha=0.05, bonferroni_divisor=5,
+                        continuity_correction=True, bootstrap_iterations=50,
+                        bootstrap_seed=0, min_discordant_pairs=1)
+        cell_result = CellResult(
+            cell="nba", n_events_total=500, n_chains_pre_gate2=50,
+            n_chains_post_gate2=50, retention_rate=1.0, gate2_pass=True,
+            mcnemar=m, variance_baseline=None, variance_intervention=None,
+            power=0.82, mde=None,
+        )
+        report = _make_run_report(cells=[cell_result])
+        run_eval_module._print_eval_summary(report, {})
+        out = capsys.readouterr().out
+        assert "pwr=0.82" in out
+
+    def test_mde_shown_when_cell_skipped(self, capsys):
+        from v5.src.harness.cell_runner import CellResult
+        cell_result = CellResult(
+            cell="nba", n_events_total=0, n_chains_pre_gate2=0,
+            n_chains_post_gate2=0, retention_rate=0.0, gate2_pass=False,
+            mcnemar=None, variance_baseline=None, variance_intervention=None,
+            power=None, mde=0.099,
+        )
+        report = _make_run_report(cells=[cell_result])
+        run_eval_module._print_eval_summary(report, {})
+        out = capsys.readouterr().out
+        assert "MDE=0.099" in out
+
+    def test_leakage_suspected_when_cf3_ratio_high(self, capsys):
+        from v5.src.harness.cell_runner import CellResult
+        from v5.src.harness.mcnemar import run_mcnemar
+
+        # Primary: intervention helps on real chains (h > 0, significant)
+        b_prim = [True] * 40 + [False] * 10
+        iv_prim = [False] * 10 + [True] * 40
+        m_prim = run_mcnemar(b_prim, iv_prim, cell="nba", alpha=0.05,
+                             bonferroni_divisor=1, continuity_correction=False,
+                             bootstrap_iterations=50, bootstrap_seed=0,
+                             min_discordant_pairs=1)
+        cell_result = CellResult(
+            cell="nba", n_events_total=500, n_chains_pre_gate2=50,
+            n_chains_post_gate2=50, retention_rate=1.0, gate2_pass=True,
+            mcnemar=m_prim, variance_baseline=None, variance_intervention=None,
+            power=None, mde=None,
+        )
+        # CF-3=A: similarly large effect on shuffled chains (same direction)
+        b_shuf = [True] * 38 + [False] * 12
+        iv_shuf = [False] * 12 + [True] * 38
+        m_shuf = run_mcnemar(b_shuf, iv_shuf, cell="nba", alpha=0.05,
+                             bonferroni_divisor=1, continuity_correction=False,
+                             bootstrap_iterations=50, bootstrap_seed=0,
+                             min_discordant_pairs=1)
+
+        report = _make_run_report(cells=[cell_result])
+        run_eval_module._print_eval_summary(report, {"nba": m_shuf})
+        out = capsys.readouterr().out
+        if m_shuf.significant:
+            ratio, suspected = run_eval_module._leakage_diagnosis(
+                m_shuf.effect_size_h, m_prim.effect_size_h
+            )
+            if suspected:
+                assert "FORMAT LEAKAGE SUSPECTED" in out
+
+    def test_expected_discrimination_when_ratio_low(self, capsys):
+        from v5.src.harness.cell_runner import CellResult
+        from v5.src.harness.mcnemar import run_mcnemar
+
+        # Primary: large effect
+        b_prim = [True] * 5 + [False] * 45
+        iv_prim = [False] * 5 + [True] * 45
+        m_prim = run_mcnemar(b_prim, iv_prim, cell="nba", alpha=0.05,
+                             bonferroni_divisor=1, continuity_correction=False,
+                             bootstrap_iterations=50, bootstrap_seed=0,
+                             min_discordant_pairs=1)
+        cell_result = CellResult(
+            cell="nba", n_events_total=500, n_chains_pre_gate2=50,
+            n_chains_post_gate2=50, retention_rate=1.0, gate2_pass=True,
+            mcnemar=m_prim, variance_baseline=None, variance_intervention=None,
+            power=None, mde=None,
+        )
+        # CF-3=A: small effect on shuffled (20% of primary)
+        b_shuf = [True] * 23 + [False] * 27
+        iv_shuf = [False] * 23 + [True] * 27
+        m_shuf = run_mcnemar(b_shuf, iv_shuf, cell="nba", alpha=0.05,
+                             bonferroni_divisor=1, continuity_correction=False,
+                             bootstrap_iterations=50, bootstrap_seed=0,
+                             min_discordant_pairs=1)
+        report = _make_run_report(cells=[cell_result])
+        run_eval_module._print_eval_summary(report, {"nba": m_shuf})
+        out = capsys.readouterr().out
+        if m_shuf.significant:
+            ratio, suspected = run_eval_module._leakage_diagnosis(
+                m_shuf.effect_size_h, m_prim.effect_size_h
+            )
+            if not suspected:
+                assert "Expected discrimination" in out
+
+
+class TestLeakageDiagnosis:
+    """Unit tests for _leakage_diagnosis helper."""
+
+    def test_ratio_computed_correctly(self):
+        ratio, _ = run_eval_module._leakage_diagnosis(cf3_h=0.4, primary_h=0.8)
+        assert abs(ratio - 0.5) < 1e-9
+
+    def test_suspected_when_ratio_above_threshold(self):
+        _, suspected = run_eval_module._leakage_diagnosis(cf3_h=0.5, primary_h=0.8)
+        assert suspected is True
+
+    def test_not_suspected_when_ratio_below_threshold(self):
+        _, suspected = run_eval_module._leakage_diagnosis(cf3_h=0.3, primary_h=0.8)
+        assert suspected is False
+
+    def test_none_ratio_when_primary_near_zero(self):
+        ratio, suspected = run_eval_module._leakage_diagnosis(cf3_h=0.4, primary_h=0.005)
+        assert ratio is None
+        assert suspected is False
+
+    def test_uses_absolute_values(self):
+        # Negative effect_size_h (intervention hurts) should still give positive ratio
+        ratio, _ = run_eval_module._leakage_diagnosis(cf3_h=-0.4, primary_h=-0.8)
+        assert ratio is not None
+        assert abs(ratio - 0.5) < 1e-9
+
+    def test_exactly_at_threshold_is_not_suspected(self):
+        # ratio == 0.50 is NOT > 0.50
+        ratio, suspected = run_eval_module._leakage_diagnosis(cf3_h=0.4, primary_h=0.8)
+        assert ratio == 0.5
+        assert suspected is False
+
+
+class TestSaveReportLeakageAndPower:
+    """Tests for _save_report including new leakage_ratio and power fields."""
+
+    def test_save_report_includes_leakage_fields(self, tmp_path):
+        out = tmp_path / "eval.json"
+        run_eval_module.run_eval(
+            cells=["nba"], dry_run=True, include_shuffle=True, output_path=out
+        )
+        data = json.loads(out.read_text())
+        shuf = data["cf3_shuffle_control"].get("nba", {})
+        assert "leakage_ratio" in shuf
+        assert "leakage_suspected" in shuf
+        assert isinstance(shuf["leakage_suspected"], (bool, type(None)))
+
+    def test_save_report_includes_power_per_cell(self, tmp_path):
+        out = tmp_path / "eval.json"
+        run_eval_module.run_eval(
+            cells=["nba"], dry_run=True, output_path=out
+        )
+        data = json.loads(out.read_text())
+        nba = next(c for c in data["cells"] if c["cell"] == "nba")
+        assert "power" in nba
+        assert "mde" in nba

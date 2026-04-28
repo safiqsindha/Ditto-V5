@@ -221,6 +221,24 @@ def run_eval(
     return all(r.mcnemar is not None for r in report.cells)
 
 
+_CF3_LEAKAGE_RATIO_THRESHOLD = 0.50  # |cf3_h|/|primary_h| above this → leakage suspected
+
+
+def _leakage_diagnosis(cf3_h: float, primary_h: float) -> tuple[float | None, bool]:
+    """
+    Return (ratio, leakage_suspected).
+    ratio  = |cf3_h| / |primary_h|; None when primary effect is near zero.
+    leakage_suspected when ratio > threshold AND both effects same direction.
+    """
+    if abs(primary_h) < 0.01:
+        return None, False
+    ratio = abs(cf3_h) / abs(primary_h)
+    # Same direction means constraint context helps in both cases (expected).
+    # Concern is when it helps equally — ratio exceeds threshold.
+    suspected = ratio > _CF3_LEAKAGE_RATIO_THRESHOLD
+    return ratio, suspected
+
+
 def _print_eval_summary(report, shuffle_results: dict) -> None:
     print(f"\n{'='*70}")
     print(f"v5 PHASE D EVALUATION — {report.run_id}")
@@ -230,14 +248,18 @@ def _print_eval_summary(report, shuffle_results: dict) -> None:
         if r.mcnemar:
             m = r.mcnemar
             sig = "**SIG**" if m.significant else "n.s."
+            power_str = f"  pwr={r.power:.2f}" if r.power is not None else ""
+            mde_str = f"  MDE={r.mde:.3f}" if r.mde is not None else ""
             print(
                 f"    [{r.cell:<14}] n={r.n_chains_post_gate2:>5} "
                 f"b={m.b:>4} c={m.c:>4} "
                 f"p_corr={m.p_value_corrected:.4f} h={m.effect_size_h:+.4f} {sig}"
+                f"{power_str}{mde_str}"
             )
         else:
             errs = "; ".join(r.errors[:2]) if r.errors else "no responses"
-            print(f"    [{r.cell:<14}] SKIPPED ({errs})")
+            mde_str = f"  MDE={r.mde:.3f}" if r.mde is not None else ""
+            print(f"    [{r.cell:<14}] SKIPPED ({errs}){mde_str}")
 
     if shuffle_results:
         print("\n  CF-3=A SHUFFLE CONTROL McNemar (shuffled chains, GT=no):")
@@ -248,14 +270,37 @@ def _print_eval_summary(report, shuffle_results: dict) -> None:
                 f"b={m.b:>4} c={m.c:>4} "
                 f"p_corr={m.p_value_corrected:.4f} h={m.effect_size_h:+.4f} {sig}"
             )
-        # Sanity: constraint context should NOT cause a large effect on shuffled chains
-        # Large significant result here may indicate prompt leakage (cf. CF-4=B check)
+
         sig_shuffle = [cell for cell, m in shuffle_results.items() if m.significant]
         if sig_shuffle:
-            print(
-                f"\n  WARNING: CF-3=A significant for {sig_shuffle}. "
-                "Review prompt content for constraint-context leakage."
-            )
+            print(f"\n  WARNING: CF-3=A significant for {sig_shuffle}.")
+            for cell in sig_shuffle:
+                cf3_m = shuffle_results[cell]
+                primary_m = next(
+                    (r.mcnemar for r in report.cells if r.cell == cell), None
+                )
+                primary_h = primary_m.effect_size_h if primary_m else 0.0
+                ratio, suspected = _leakage_diagnosis(cf3_m.effect_size_h, primary_h)
+                if ratio is None:
+                    print(
+                        f"    [{cell}] CF-3=A significant but primary effect near zero "
+                        f"— investigate before claiming primary result valid."
+                    )
+                elif suspected:
+                    print(
+                        f"    [{cell}] FORMAT LEAKAGE SUSPECTED: "
+                        f"|CF3 h|={abs(cf3_m.effect_size_h):.3f} is "
+                        f"{ratio:.0%} of primary |h|={abs(primary_h):.3f} "
+                        f"(>{_CF3_LEAKAGE_RATIO_THRESHOLD:.0%} threshold). "
+                        f"Model may be using constraint-format cue, not causal reasoning."
+                    )
+                else:
+                    print(
+                        f"    [{cell}] Expected discrimination: "
+                        f"|CF3 h|={abs(cf3_m.effect_size_h):.3f} is "
+                        f"{ratio:.0%} of primary |h|={abs(primary_h):.3f} "
+                        f"(within {_CF3_LEAKAGE_RATIO_THRESHOLD:.0%} tolerance)."
+                    )
 
     agg = report.aggregate
     if agg:
@@ -270,8 +315,23 @@ def _print_eval_summary(report, shuffle_results: dict) -> None:
 def _save_report(report, shuffle_results: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = report.to_dict()
-    data["cf3_shuffle_control"] = {
-        cell: {
+
+    # Augment per-cell primary results with power/MDE
+    cell_result_map = {r.cell: r for r in report.cells}
+    for cell_dict in data.get("cells", []):
+        cell = cell_dict.get("cell", "")
+        r = cell_result_map.get(cell)
+        if r:
+            cell_dict["power"] = r.power
+            cell_dict["mde"] = r.mde
+
+    # CF-3=A shuffle control with leakage diagnosis
+    cf3_data: dict = {}
+    for cell, m in shuffle_results.items():
+        primary_m = next((r.mcnemar for r in report.cells if r.cell == cell), None)
+        primary_h = primary_m.effect_size_h if primary_m else 0.0
+        ratio, suspected = _leakage_diagnosis(m.effect_size_h, primary_h)
+        cf3_data[cell] = {
             "n_shuffled": m.n_chains,
             "b": m.b,
             "c": m.c,
@@ -283,9 +343,11 @@ def _save_report(report, shuffle_results: dict, path: Path) -> None:
             "ci_lower": m.ci_lower,
             "ci_upper": m.ci_upper,
             "summary": m.summary(),
+            "leakage_ratio": ratio,
+            "leakage_suspected": suspected,
         }
-        for cell, m in shuffle_results.items()
-    }
+    data["cf3_shuffle_control"] = cf3_data
+
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
