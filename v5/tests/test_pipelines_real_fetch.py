@@ -299,81 +299,30 @@ class TestRLRealFetch:
 # ---------------------------------------------------------------------------
 
 class TestHSRealFetch:
-    def test_fetch_handles_403_and_breaks(self, cfgs, tmp_path):
+    """Hearthstone is mock-only (no public bulk replay API)."""
+
+    def test_fetch_always_returns_empty(self, cfgs, tmp_path):
         pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
-        pipeline.config.sample_target = 5
-
-        list_resp = MagicMock()
-        list_resp.status_code = 200
-        list_resp.json.return_value = {"results": [{"shortid": f"r{i}"} for i in range(3)]}
-
-        forbidden_resp = MagicMock()
-        forbidden_resp.status_code = 403
-
-        def get_side_effect(url, *args, **kwargs):
-            if url.endswith("/replays/"):
-                return list_resp
-            return forbidden_resp
-
-        with patch.object(pipeline.session, "get", side_effect=get_side_effect), \
-             patch("v5.src.cells.hearthstone.pipeline.time.sleep"):
-            paths = pipeline.fetch()
-        # 403 should break the loop, no paths
+        paths = pipeline.fetch()
         assert paths == []
 
-    def test_fetch_handles_429_backoff(self, cfgs, tmp_path):
+    def test_parse_always_returns_empty(self, cfgs, tmp_path):
         pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
-        pipeline.config.sample_target = 1
-
-        list_resp = MagicMock()
-        list_resp.status_code = 200
-        list_resp.json.return_value = {"results": [{"shortid": "r1"}]}
-
-        rate_resp = MagicMock()
-        rate_resp.status_code = 429
-
-        def get_side_effect(url, *args, **kwargs):
-            if url.endswith("/replays/"):
-                return list_resp
-            return rate_resp
-
-        with patch.object(pipeline.session, "get", side_effect=get_side_effect), \
-             patch("v5.src.cells.hearthstone.pipeline.time.sleep") as mock_sleep:
-            pipeline.fetch()
-        # 429 triggers a 60s sleep
-        assert any(call.args[0] == 60 for call in mock_sleep.call_args_list)
-
-    def test_fetch_writes_replay_xml(self, cfgs, tmp_path, monkeypatch):
-        monkeypatch.setenv("HSREPLAY_API_KEY", "fake")
-        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
-        pipeline.config.sample_target = 1
-
-        list_resp = MagicMock()
-        list_resp.status_code = 200
-        list_resp.json.return_value = {"results": [{"shortid": "r1"}]}
-
-        replay_resp = MagicMock()
-        replay_resp.status_code = 200
-        replay_resp.json.return_value = {"replay_xml": "<Game>fake</Game>"}
-
-        def get_side_effect(url, *args, **kwargs):
-            if url.endswith("/replays/"):
-                return list_resp
-            return replay_resp
-
-        with patch.object(pipeline.session, "get", side_effect=get_side_effect), \
-             patch("v5.src.cells.hearthstone.pipeline.time.sleep"):
-            paths = pipeline.fetch()
-        assert len(paths) == 1
-        assert paths[0].read_text() == "<Game>fake</Game>"
-
-    def test_parse_handles_missing_hearthstone(self, cfgs, tmp_path):
-        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
-        replay = tmp_path / "test.hsreplay"
-        replay.write_text("<Game></Game>")
-        with patch.dict("sys.modules", {"hearthstone": None}):
-            records = pipeline.parse([replay])
+        records = pipeline.parse([tmp_path / "nonexistent.hsreplay"])
         assert records == []
+
+    def test_generate_mock_data_hits_sample_target(self, cfgs, tmp_path):
+        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
+        pipeline.config.sample_target = 10
+        streams = pipeline.generate_mock_data()
+        assert len(streams) == 10
+
+    def test_mock_streams_have_turn_phases(self, cfgs, tmp_path):
+        pipeline = HearthstonePipeline(config=cfgs["hearthstone"], data_root=tmp_path)
+        pipeline.config.sample_target = 2
+        streams = pipeline.generate_mock_data()
+        phases = {e.phase for s in streams for e in s.events}
+        assert any(p.startswith("turn_") for p in phases)
 
 
 # ---------------------------------------------------------------------------
