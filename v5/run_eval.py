@@ -34,9 +34,11 @@ import logging
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()  # loads .env from project root (or any parent directory)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # loads .env from project root (or any parent directory)
+except ImportError:
+    pass  # python-dotenv not installed; set env vars manually or via CI secrets
 
 logging.basicConfig(
     level=logging.INFO,

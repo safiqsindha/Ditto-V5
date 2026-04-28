@@ -29,7 +29,7 @@ jobs:
         # Domain pipelines have try/except ImportError guards for missing libs.
         run: |
           pip install --upgrade pip
-          pip install numpy scipy pyyaml pytest pytest-cov requests
+          pip install numpy scipy pyyaml pytest pytest-cov requests python-dotenv
 
       - name: Run pytest with coverage
         run: |
