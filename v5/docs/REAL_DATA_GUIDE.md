@@ -10,7 +10,7 @@ How to switch from mock to real-data acquisition, per cell. **Run only after SPE
 |------|------------|------------------|
 | Fortnite | `EPIC_ACCOUNT_ID`, `EPIC_ACCESS_TOKEN` | Epic Dev Portal: https://dev.epicgames.com/portal/ — create app, generate OAuth client; per D-15, use a **burner account** (signup at https://www.epicgames.com/id/register) |
 | NBA | _(none)_ | NBA Stats API is public — no key. See the `nba_api` docs: https://github.com/swar/nba_api |
-| CS:GO / CS2 | _(none)_ | HLTV public demo archive — no key. Browse: https://www.hltv.org/results |
+| CS:GO / CS2 | `FACEIT_API_KEY` | FACEIT Developer Portal: https://developers.faceit.com → My Apps → Create App |
 | Rocket League | `BALLCHASING_TOKEN` | Free signup → token on profile page: https://ballchasing.com/upload (login first); API docs: https://ballchasing.com/doc/api |
 | Hearthstone | `HSREPLAY_API_KEY` | Account + API key: https://hsreplay.net/account/api/ ; bulk access docs: https://hsreplay.net/api/v1/ |
 
@@ -27,8 +27,10 @@ export BALLCHASING_TOKEN=...
 # Hearthstone — request at https://hsreplay.net/account/api/
 export HSREPLAY_API_KEY=...
 
+# CS:GO/CS2 — request at https://developers.faceit.com
+export FACEIT_API_KEY=...
+
 # NBA: no key required (public API)
-# CS:GO/CS2: no key required (HLTV public demos)
 ```
 
 ---
@@ -100,18 +102,14 @@ print(f'Fetched {len(streams)} games')
 
 ### CS:GO/CS2
 
-**Source:** HLTV demo archive (public). 2024 S-tier tournaments: IEM Katowice, BLAST Premier, ESL One.
+**Source:** FACEIT API v4 (JSON). Level 5+ skill championships, CS2. No local demo tooling required.
 
-**Token request:** None — public archive.
-- HLTV results browser: https://www.hltv.org/results
-- awpy package: https://github.com/pnxenopoulos/awpy
-- Underlying parser: https://github.com/markus-wa/demoinfocs-golang
+**Token request:**
+- FACEIT Developer Portal: https://developers.faceit.com → My Apps → Create App → copy API Key
+- Set `FACEIT_API_KEY` in `.env`
 
-**Tooling required:**
-- `pip install awpy>=1.5.0` (bundles demoinfocs-golang via cgo)
-- HLTV courtesy: pipeline waits 1.5s between demo downloads
-
-**Demo size:** Each .dem file is 30–80 MB. 150 maps ≈ 5–10 GB raw storage.
+**Tooling required:** None beyond `pip install -r v5/requirements.txt`. The pipeline fetches
+championship → match IDs → per-match JSON stats via `Authorization: Bearer {FACEIT_API_KEY}`.
 
 **Run:**
 ```bash
@@ -120,11 +118,11 @@ from v5.src.common.config import load_cell_configs
 from v5.src.cells.csgo.pipeline import CSGOPipeline
 config = load_cell_configs()['csgo']
 streams = CSGOPipeline(config=config).run()
-print(f'Fetched {len(streams)} maps')
+print(f'Fetched {len(streams)} matches')
 "
 ```
 
-**Note:** Round-level granularity by default (Decision D-7). [REQUIRES SIGN-OFF Q5] before changing.
+**Note:** Round-level granularity synthesized from per-player kill/assist/entry/flash stats (Decision D-7).
 
 ---
 
@@ -218,7 +216,7 @@ If any cell's Gate 2 retention falls below 50%:
 
 Real data acquisition is API/CDN-bound — minimal API spend:
 - NBA: free (rate-limited public endpoints)
-- CS:GO: free (HLTV public demos)
+- CS:GO: free (FACEIT API v4; JSON responses, no demo download)
 - Rocket League: free tier (BallChasing free key)
 - Hearthstone: free tier or API key (depending on volume)
 - Fortnite: free (Epic account; account-flagging risk per D-15)
@@ -233,10 +231,10 @@ Real data acquisition is API/CDN-bound — minimal API spend:
 |------|-----|-----------|--------|
 | Fortnite | ~10 GB (200 .replay) | ~1 GB (JSON) | ~100 MB (JSONL) |
 | NBA | ~50 MB (300 JSON) | same | ~50 MB |
-| CS:GO | ~7 GB (150 .dem) | ~700 MB | ~150 MB |
+| CS:GO | ~50 MB (150 JSON via FACEIT API) | same | ~50 MB |
 | Rocket League | ~500 MB (250 .replay) | ~250 MB | ~80 MB |
 | Hearthstone | ~100 MB (300 XML) | same | ~80 MB |
 
-**Total:** ~18 GB raw, ~2.5 GB processed, ~500 MB events.
+**Total:** ~11 GB raw, ~1.8 GB processed, ~400 MB events.
 
 All data directories are gitignored.

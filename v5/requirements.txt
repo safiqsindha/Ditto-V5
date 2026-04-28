@@ -14,8 +14,8 @@ statsmodels>=0.14.0
 # NBA cell
 nba_api>=1.4.0
 
-# CS:GO/CS2 cell
-awpy>=1.5.0
+# CS:GO/CS2 cell — uses FACEIT API v4 (JSON, no local tooling required)
+# awpy removed: CS2 pipeline switched from HLTV demo parsing to FACEIT JSON API
 
 # Hearthstone cell
 hearthstone>=2.2.0
@@ -29,6 +29,9 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.0
 pytest-cov>=5.0.0
 
+# LLM judge (required for real evaluation, not needed for --dry-run)
+anthropic>=0.20.0
+
 # Notebooks (optional)
 jupyter>=1.0.0
 
@@ -37,4 +40,4 @@ jupyter>=1.0.0
 # Rocket League: rrrocket (Rust binary) OR carball (Python wrapper).
 #   If using carball, pin: carball<2.0  (last known-working; see RISK_MITIGATIONS T2)
 #   The pipeline already falls back to rrrocket subprocess if carball is absent.
-# CS:GO: awpy requires Go 1.21+ for demoinfocs-golang (bundled via cgo in awpy wheels)
+# CS:GO: FACEIT API v4 (JSON) — set FACEIT_API_KEY in .env; no local toolchain needed.

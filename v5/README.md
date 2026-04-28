@@ -15,7 +15,7 @@ Five-cell parallel replication of v3's constraint-chain detection methodology ac
 |------|---------|-------------|---------------|
 | `fortnite` | FNCS / Cash Cup 2024 | Epic CDN replays + FortniteReplayDecompressor | 200 matches |
 | `nba` | 2023-24 season | NBA Stats API (PlayByPlayV3) | 300 games |
-| `csgo` | 2024 S-tier (CS2) | HLTV demos + awpy | 150 maps |
+| `csgo` | 2024 S-tier (CS2) | FACEIT API v4 (`FACEIT_API_KEY`) | 150 maps |
 | `rocket_league` | RLCS 2024 | BallChasing.com + carball | 250 replays |
 | `hearthstone` | 2024 Legend ladder | HSReplay API + hslog | 300 games |
 
@@ -24,11 +24,17 @@ Five-cell parallel replication of v3's constraint-chain detection methodology ac
 ## Quickstart
 
 ```bash
-# Install dependencies
+# Install dependencies (Python 3.9+)
 pip install -r v5/requirements.txt
+
+# Copy and fill in your API keys
+cp .env.example .env   # then edit .env
 
 # Run the test suite
 python -m pytest v5/tests/
+
+# Dry-run evaluation (mock data, no API or LLM calls)
+python -m v5.run_eval --dry-run --output v5/RESULTS/eval_dry_run.json
 
 # Run the pilot validator (mock data, no API calls)
 python -m v5.run_pilot
