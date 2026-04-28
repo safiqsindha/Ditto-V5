@@ -127,7 +127,7 @@ class CellRunner:
         (useful for infrastructure validation without real model calls).
         """
         run_id = f"v5_run_{int(time.time())}"
-        ts = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         cell_results = []
         mcnemar_results = []
