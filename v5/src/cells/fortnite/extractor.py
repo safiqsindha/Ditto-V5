@@ -1,14 +1,31 @@
 """
 Fortnite event extractor.
 
-Converts FortniteReplayDecompressor JSON output to normalized GameEvent stream.
+Converts parsed Type-3 event chunks (from Epic's datastorage replay API)
+into normalized GameEvent streams.
 
-The decompressor JSON schema (SL-x-TnT format) contains:
-  - header: match metadata
-  - playerEliminations: list of elimination events with timestamp, eliminator, eliminated
-  - playerMovements: (optional) position snapshots
-  - gameEvents: general match events
-  - stormEvents: storm phase transitions
+Each input record has the shape:
+    {
+        "match_id": "...",
+        "events": [
+            {
+                "id": "...",
+                "group": "playerElim" | "AthenaMatchStats" | ...,
+                "metadata": {...},   # parsed JSON from FString Metadata field
+                "time1_ms": int,
+                "time2_ms": int,
+            },
+            ...
+        ]
+    }
+
+Known Fortnite event groups:
+  playerElim       → elimination events (eliminator, eliminated, weapon, knocked)
+  AthenaMatchStats → end-of-match stats per player
+  AthenaMatchTeamStats → team-level stats
+  PlayerLogin      → player entry (gives actor ID mapping)
+  stateEvent       → storm phase transitions (when present)
+  PhaseChange      → storm phase advance
 """
 
 from __future__ import annotations
@@ -21,153 +38,156 @@ from ...common.schema import EventStream, GameEvent
 
 logger = logging.getLogger(__name__)
 
+# Map from Fortnite event group name → normalized event type
+_GROUP_TO_EVENT_TYPE: dict[str, str] = {
+    "playerElim": "engage_decision",
+    "PhaseChange": "zone_enter",
+    "stateEvent": "zone_enter",
+    "AthenaMatchTeamStats": "strategy_adapt",
+    "PlayerLogin": None,           # metadata only, not a chain event
+    "AthenaMatchStats": None,
+}
+
+# Map raw weapon / action strings found in metadata
+_WEAPON_MAP: dict[str, str] = {
+    "fall": "risk_accept",
+    "storm": "zone_exit",
+    "environment": "risk_accept",
+}
+
 
 class FortniteExtractor:
     """
-    Extracts normalized GameEvents from a decompressed Fortnite replay JSON.
+    Extracts normalized GameEvents from a replay event-chunk record.
     """
 
     def extract(self, record: dict[str, Any]) -> EventStream:
-        """Convert a replay JSON record to a normalized EventStream."""
-        header = record.get("header", {})
-        game_id = self._make_game_id(record, header)
-        stream = EventStream(
-            game_id=game_id,
-            cell="fortnite",
-            metadata={
-                "event_type": header.get("eventType", "unknown"),
-                "region": header.get("region", "unknown"),
-                "season": header.get("season", "unknown"),
-                "timestamp_utc": header.get("timestamp", ""),
-            },
-        )
+        match_id = record.get("match_id", "")
+        game_id = f"fnc_{match_id}" if match_id else _hash_id(record)
+        stream = EventStream(game_id=game_id, cell="fortnite")
 
         seq = 0
-        # Extract storm events (zone transitions = high-decision-weight events)
-        for ev in record.get("stormEvents", []):
-            game_event = self._parse_storm_event(ev, game_id, seq)
-            if game_event:
-                stream.append(game_event)
+        for chunk in record.get("events", []):
+            group = chunk.get("group", "")
+            meta = chunk.get("metadata", {})
+            t1 = chunk.get("time1_ms", 0)
+            t2 = chunk.get("time2_ms", 0)
+            # Use midpoint of time range as event timestamp (seconds)
+            ts = ((t1 + t2) / 2.0) / 1000.0
+
+            ev = self._parse_chunk(group, meta, ts, game_id, seq)
+            if ev is not None:
+                stream.append(ev)
                 seq += 1
 
-        # Extract player eliminations (engagement outcomes)
-        for ev in record.get("playerEliminations", []):
-            game_event = self._parse_elimination(ev, game_id, seq)
-            if game_event:
-                stream.append(game_event)
-                seq += 1
-
-        # Extract general game events
-        for ev in record.get("gameEvents", []):
-            game_event = self._parse_game_event(ev, game_id, seq)
-            if game_event:
-                stream.append(game_event)
-                seq += 1
-
-        # Sort by timestamp and re-index
         stream.events.sort(key=lambda e: e.timestamp)
         for i, e in enumerate(stream.events):
             e.sequence_idx = i
 
         return stream
 
-    def _parse_storm_event(self, ev: dict, game_id: str, seq: int) -> GameEvent | None:
-        try:
+    def _parse_chunk(
+        self,
+        group: str,
+        meta: dict,
+        ts: float,
+        game_id: str,
+        seq: int,
+    ) -> GameEvent | None:
+        if group == "playerElim":
+            return self._parse_elim(meta, ts, game_id, seq)
+        if group in ("PhaseChange", "stateEvent"):
+            return self._parse_phase(group, meta, ts, game_id, seq)
+        if group in ("AthenaMatchStats", "PlayerLogin", "AthenaMatchTeamStats"):
+            return None  # skip non-chain events
+        # Unknown group: emit as position_commit if it has a player actor
+        actor = _extract_actor(meta)
+        if actor and actor != "unknown":
             return GameEvent(
-                timestamp=float(ev.get("elapsedTime", ev.get("timestamp", 0))),
-                event_type="zone_enter",  # storm circle = zone constraint
+                timestamp=ts,
+                event_type="position_commit",
+                actor=actor,
+                location_context={"group": group},
+                raw_data_blob=meta,
+                cell="fortnite",
+                game_id=game_id,
+                sequence_idx=seq,
+            )
+        return None
+
+    def _parse_elim(
+        self, meta: dict, ts: float, game_id: str, seq: int
+    ) -> GameEvent | None:
+        try:
+            eliminator = (
+                meta.get("eliminator")
+                or meta.get("EliminatorId")
+                or meta.get("killerId")
+                or "unknown"
+            )
+            eliminated = (
+                meta.get("eliminated")
+                or meta.get("EliminatedId")
+                or meta.get("victimId")
+                or "unknown"
+            )
+            weapon = str(meta.get("weapon", meta.get("gunType", "unknown"))).lower()
+            knocked = bool(meta.get("knocked", meta.get("isKnocked", False)))
+
+            # Storm/fall kills indicate zone constraint violation
+            event_type = _WEAPON_MAP.get(weapon, "engage_decision")
+
+            return GameEvent(
+                timestamp=ts,
+                event_type=event_type,
+                actor=str(eliminator),
+                location_context={
+                    "victim": str(eliminated),
+                    "weapon": weapon,
+                    "knocked": knocked,
+                },
+                raw_data_blob=meta,
+                cell="fortnite",
+                game_id=game_id,
+                sequence_idx=seq,
+            )
+        except Exception as e:
+            logger.debug(f"[fortnite] elim parse error: {e}")
+            return None
+
+    def _parse_phase(
+        self, group: str, meta: dict, ts: float, game_id: str, seq: int
+    ) -> GameEvent | None:
+        try:
+            phase = int(meta.get("phase", meta.get("Phase", meta.get("stormPhase", 0))))
+            return GameEvent(
+                timestamp=ts,
+                event_type="zone_enter",
                 actor="storm",
                 location_context={
-                    "storm_phase": ev.get("phase", 0),
-                    "circle_x": ev.get("circleCenterX", 0),
-                    "circle_y": ev.get("circleCenterY", 0),
-                    "circle_radius": ev.get("circleRadius", 0),
+                    "storm_phase": phase,
+                    "circle_x": float(meta.get("circleCenterX", meta.get("X", 0))),
+                    "circle_y": float(meta.get("circleCenterY", meta.get("Y", 0))),
+                    "circle_radius": float(meta.get("circleRadius", meta.get("radius", 0))),
                 },
-                raw_data_blob=ev,
+                raw_data_blob=meta,
                 cell="fortnite",
                 game_id=game_id,
                 sequence_idx=seq,
-                phase=f"storm_phase_{ev.get('phase', 0)}",
+                phase=f"storm_phase_{phase}",
             )
         except Exception as e:
-            logger.debug(f"Storm event parse error: {e}")
+            logger.debug(f"[fortnite] phase parse error: {e}")
             return None
 
-    def _parse_elimination(self, ev: dict, game_id: str, seq: int) -> GameEvent | None:
-        try:
-            return GameEvent(
-                timestamp=float(ev.get("time", ev.get("timestamp", 0))),
-                event_type="engage_decision",
-                actor=ev.get("eliminator", {}).get("id", "unknown"),
-                location_context={
-                    "victim": ev.get("eliminated", {}).get("id", "unknown"),
-                    "weapon": ev.get("gunType", "unknown"),
-                    "knocked": ev.get("knocked", False),
-                },
-                raw_data_blob=ev,
-                cell="fortnite",
-                game_id=game_id,
-                sequence_idx=seq,
-                actor_team=ev.get("eliminator", {}).get("team", None),
-            )
-        except Exception as e:
-            logger.debug(f"Elimination parse error: {e}")
-            return None
 
-    def _parse_game_event(self, ev: dict, game_id: str, seq: int) -> GameEvent | None:
-        raw_type = ev.get("type", ev.get("eventType", "unknown"))
-        normalized_type = self._normalize_event_type(raw_type)
-        if normalized_type is None:
-            return None
-        try:
-            return GameEvent(
-                timestamp=float(ev.get("time", ev.get("timestamp", 0))),
-                event_type=normalized_type,
-                actor=ev.get("playerId", ev.get("actorId", "unknown")),
-                location_context={
-                    "x": ev.get("posX", 0),
-                    "y": ev.get("posY", 0),
-                    "z": ev.get("posZ", 0),
-                },
-                raw_data_blob=ev,
-                cell="fortnite",
-                game_id=game_id,
-                sequence_idx=seq,
-            )
-        except Exception as e:
-            logger.debug(f"Game event parse error ({raw_type}): {e}")
-            return None
+def _extract_actor(meta: dict) -> str:
+    for key in ("playerId", "actorId", "accountId", "player", "actor"):
+        v = meta.get(key)
+        if v and isinstance(v, str):
+            return v
+    return "unknown"
 
-    @staticmethod
-    def _normalize_event_type(raw_type: str) -> str | None:
-        """Map raw Fortnite event types to normalized actionable types."""
-        mapping = {
-            "BuildWall": "resource_spend",
-            "BuildFloor": "resource_spend",
-            "BuildStair": "resource_spend",
-            "BuildRoof": "resource_spend",
-            "HarvestItem": "resource_gain",
-            "OpenChest": "resource_gain",
-            "ConsumeItem": "item_use",
-            "WeaponSwitch": "target_select",
-            "PlayerJump": None,         # Not actionable
-            "PlayerLand": None,
-            "MapMarker": "team_coordinate",
-            "PingLocation": "team_coordinate",
-            "StormSurge": "risk_accept",
-            "PhaseChange": "rotation_commit",
-            "AbilityActivated": "ability_use",
-            "Heal": "item_use",
-            "Revive": "team_coordinate",
-            "VehicleEnter": "rotation_commit",
-            "LootDrop": "resource_gain",
-        }
-        return mapping.get(raw_type, None)
 
-    @staticmethod
-    def _make_game_id(record: dict, header: dict) -> str:
-        candidate = header.get("replayId") or header.get("matchId") or ""
-        if candidate:
-            return f"fnc_{candidate}"
-        content = str(record)[:256]
-        return "fnc_" + hashlib.md5(content.encode()).hexdigest()[:16]
+def _hash_id(record: dict) -> str:
+    return "fnc_" + hashlib.md5(str(record)[:256].encode()).hexdigest()[:16]

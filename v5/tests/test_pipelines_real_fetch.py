@@ -9,7 +9,6 @@ tests can't reach.
 from __future__ import annotations
 
 import json
-import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -382,86 +381,86 @@ class TestHSRealFetch:
 # ---------------------------------------------------------------------------
 
 class TestFortniteRealFetch:
-    def test_fetch_handles_missing_node(self, cfgs, tmp_path, monkeypatch):
-        monkeypatch.setenv("EPIC_ACCOUNT_ID", "fake")
-        monkeypatch.setenv("EPIC_ACCESS_TOKEN", "fake")
+    # Pure Python Epic API implementation: OAuth client_credentials + JSON event chunks.
+    # No Node.js / dotnet subprocess needed.
+
+    _FAKE_EVENTS = [
+        {"id": "e1", "group": "PhaseChange",
+         "metadata": {"phase": 1, "circleCenterX": 0, "circleCenterY": 0, "circleRadius": 5000},
+         "time1_ms": 90000, "time2_ms": 90000},
+        {"id": "e2", "group": "playerElim",
+         "metadata": {"eliminator": "p1", "eliminated": "p2", "weapon": "AR", "knocked": False},
+         "time1_ms": 120000, "time2_ms": 120000},
+    ]
+    _FAKE_RECORD = {"match_id": "abc123", "events": _FAKE_EVENTS}
+
+    def _mock_pipeline(self, cfgs, tmp_path):
         pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-        with patch("subprocess.run", side_effect=FileNotFoundError("node not found")):
+        pipeline.config.sample_target = 1
+        return pipeline
+
+    def test_fetch_auth_failure_returns_empty(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        # Simulate OAuth failure
+        with patch.object(pipeline, "_get_token", return_value=""), \
+             patch("v5.src.cells.fortnite.pipeline.time.sleep"):
             paths = pipeline.fetch()
         assert paths == []
 
-    def test_fetch_handles_subprocess_timeout(self, cfgs, tmp_path, monkeypatch):
-        monkeypatch.setenv("EPIC_ACCOUNT_ID", "fake")
-        monkeypatch.setenv("EPIC_ACCESS_TOKEN", "fake")
-        pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-        with patch("subprocess.run",
-                   side_effect=subprocess.TimeoutExpired(cmd="npx", timeout=300)):
+    def test_fetch_expired_replay_skipped(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        # Metadata returns 404 → replay expired
+        with patch.object(pipeline, "_get_token", return_value="tok"), \
+             patch.object(pipeline, "_get_metadata", return_value=None), \
+             patch("v5.src.cells.fortnite.pipeline.time.sleep"):
             paths = pipeline.fetch()
         assert paths == []
 
-    def test_fetch_handles_nonzero_exit(self, cfgs, tmp_path, monkeypatch):
-        monkeypatch.setenv("EPIC_ACCOUNT_ID", "fake")
-        monkeypatch.setenv("EPIC_ACCESS_TOKEN", "fake")
-        pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "auth failed"
-        with patch("subprocess.run", return_value=mock_result):
+    def test_fetch_writes_json_on_success(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        fake_meta = {"Events": [{"Id": "chunk1"}]}
+        with patch.object(pipeline, "_get_token", return_value="tok"), \
+             patch.object(pipeline, "_get_metadata", return_value=fake_meta), \
+             patch.object(pipeline, "_download_chunk", return_value=b""), \
+             patch("v5.src.cells.fortnite.pipeline._parse_event_chunk",
+                   return_value=self._FAKE_EVENTS[0]), \
+             patch("v5.src.cells.fortnite.pipeline.time.sleep"):
             paths = pipeline.fetch()
-        assert paths == []
+        assert len(paths) == 1
+        assert paths[0].suffix == ".json"
 
-    def test_fetch_succeeds_when_replays_appear(self, cfgs, tmp_path, monkeypatch):
-        monkeypatch.setenv("EPIC_ACCOUNT_ID", "fake")
-        monkeypatch.setenv("EPIC_ACCESS_TOKEN", "fake")
-        pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-
-        def mock_run(cmd, *args, **kwargs):
-            # Side effect: write a fake replay file when the downloader is invoked
-            event_id = cmd[cmd.index("--event-id") + 1]
-            out_dir = pipeline.raw_dir / event_id
-            out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / "fake.replay").write_bytes(b"data")
-            result = MagicMock()
-            result.returncode = 0
-            return result
-
-        with patch("subprocess.run", side_effect=mock_run):
+    def test_fetch_skips_existing_file(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        # Pre-write the output file
+        norm_id = "0fbcece6e1774c9abdd1ebd88fbad4ec"
+        existing = pipeline.raw_dir / f"{norm_id}.json"
+        existing.write_text(json.dumps(self._FAKE_RECORD))
+        with patch.object(pipeline, "_get_token", return_value="tok"):
             paths = pipeline.fetch()
-        assert len(paths) > 0
+        # Should not call _get_token at all for already-downloaded match
+        assert existing in paths
 
-    def test_parse_handles_missing_dotnet(self, cfgs, tmp_path):
-        pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-        replay = tmp_path / "test.replay"
-        replay.write_bytes(b"fake")
-        with patch("subprocess.run", side_effect=FileNotFoundError("dotnet not found")):
-            records = pipeline.parse([replay])
-        assert records == []
-
-    def test_parse_handles_decompressor_failure(self, cfgs, tmp_path):
-        pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-        replay = tmp_path / "test.replay"
-        replay.write_bytes(b"fake")
-        mock_result = MagicMock()
-        mock_result.returncode = 2
-        mock_result.stderr = "corrupted replay"
-        with patch("subprocess.run", return_value=mock_result):
-            records = pipeline.parse([replay])
-        assert records == []
-
-    def test_parse_loads_decompressed_json(self, cfgs, tmp_path):
-        pipeline = FortnitePipeline(config=cfgs["fortnite"], data_root=tmp_path)
-        replay = tmp_path / "test.replay"
-        replay.write_bytes(b"fake")
-
-        def mock_run(cmd, *args, **kwargs):
-            # Side effect: write the JSON output the decompressor would produce
-            json_path = pipeline.processed_dir / "test.json"
-            json_path.write_text('{"header": {"replayId": "test"}, "stormEvents": []}')
-            result = MagicMock()
-            result.returncode = 0
-            return result
-
-        with patch("subprocess.run", side_effect=mock_run):
-            records = pipeline.parse([replay])
+    def test_parse_loads_json_file(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        p = pipeline.raw_dir / "abc.json"
+        p.write_text(json.dumps(self._FAKE_RECORD))
+        records = pipeline.parse([p])
         assert len(records) == 1
-        assert records[0]["header"]["replayId"] == "test"
+        assert records[0]["match_id"] == "abc123"
+
+    def test_parse_skips_corrupt_file(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        p = pipeline.raw_dir / "bad.json"
+        p.write_text("not json")
+        records = pipeline.parse([p])
+        assert records == []
+
+    def test_extract_events_from_event_chunks(self, cfgs, tmp_path):
+        pipeline = self._mock_pipeline(cfgs, tmp_path)
+        streams = pipeline.extract_events([self._FAKE_RECORD])
+        assert len(streams) == 1
+        stream = streams[0]
+        zone = [e for e in stream.events if e.event_type == "zone_enter"]
+        engage = [e for e in stream.events if e.event_type == "engage_decision"]
+        assert len(zone) == 1
+        assert len(engage) == 1
