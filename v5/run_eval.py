@@ -228,14 +228,15 @@ def _leakage_diagnosis(cf3_h: float, primary_h: float) -> tuple[float | None, bo
     """
     Return (ratio, leakage_suspected).
     ratio  = |cf3_h| / |primary_h|; None when primary effect is near zero.
-    leakage_suspected when ratio > threshold AND both effects same direction.
+    leakage_suspected when BOTH effects are same direction (same sign) AND
+    ratio > threshold.  Opposite-sign effects indicate the model is correctly
+    using constraint context for one condition only — not format leakage.
     """
     if abs(primary_h) < 0.01:
         return None, False
     ratio = abs(cf3_h) / abs(primary_h)
-    # Same direction means constraint context helps in both cases (expected).
-    # Concern is when it helps equally — ratio exceeds threshold.
-    suspected = ratio > _CF3_LEAKAGE_RATIO_THRESHOLD
+    same_direction = (cf3_h * primary_h) > 0  # both positive or both negative
+    suspected = same_direction and (ratio > _CF3_LEAKAGE_RATIO_THRESHOLD)
     return ratio, suspected
 
 

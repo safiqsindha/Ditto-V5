@@ -336,6 +336,12 @@ class TestLeakageDiagnosis:
         assert ratio == 0.5
         assert suspected is False
 
+    def test_opposite_direction_never_suspected(self):
+        # CF-3 and primary have opposite signs → correct discrimination, not leakage
+        ratio, suspected = run_eval_module._leakage_diagnosis(cf3_h=-0.6, primary_h=0.8)
+        assert ratio is not None
+        assert suspected is False  # opposite direction, even though ratio=0.75 > threshold
+
 
 class TestSaveReportLeakageAndPower:
     """Tests for _save_report including new leakage_ratio and power fields."""

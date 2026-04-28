@@ -46,7 +46,7 @@ class FixedPerCellChainBuilder(ChainBuilder):
     Usage
     -----
     builder = FixedPerCellChainBuilder(per_cell_chain_length={
-        "fortnite": 8, "nba": 6, "csgo": 10, "rocket_league": 12, "hearthstone": 5,
+        "fortnite": 8, "nba": 5, "csgo": 10, "rocket_league": 12, "poker": 8,
     })
     chains = builder.build_from_streams(streams, cell="nba")
     """
@@ -63,7 +63,7 @@ class FixedPerCellChainBuilder(ChainBuilder):
             "nba": None,
             "csgo": None,
             "rocket_league": None,
-            "hearthstone": None,
+            "poker": None,
         }
         self.overlap = overlap
         self.sampling = sampling

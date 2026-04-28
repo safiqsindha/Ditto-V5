@@ -255,11 +255,15 @@ class CellRunner:
                 bonferroni_divisor=self.config.bonferroni_divisor,
             )
         else:
-            mde_val = minimum_detectable_effect(
-                n_chains=n_post_gate2,
-                alpha=self.config.alpha,
-                bonferroni_divisor=self.config.bonferroni_divisor,
-            )
+            pass  # no responses; power stays None
+
+        # MDE is always computed from n_post_gate2 — useful both pre-run
+        # (when no responses yet) and post-hoc (to show detection threshold).
+        mde_val = minimum_detectable_effect(
+            n_chains=n_post_gate2,
+            alpha=self.config.alpha,
+            bonferroni_divisor=self.config.bonferroni_divisor,
+        )
 
         return CellResult(
             cell=cell,

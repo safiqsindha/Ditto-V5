@@ -226,7 +226,7 @@ class NBAExtractor:
 
     # Legacy play-level parser retained for direct-event callers (e.g., ME-3
     # micro-experiment if pursued). Not used by extract() under Q6-A.
-    def _parse_row(
+    def _parse_row_legacy(
         self, row: list, col_idx: dict, game_id: str, seq: int
     ) -> GameEvent | None:
         """Legacy play-level parser. Reserved for ME-3 (NBA play-level micro-exp)."""
