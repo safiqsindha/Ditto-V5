@@ -363,7 +363,7 @@ class RocketLeagueT(TranslationFunction):
         # Build play slices between goals
         boundaries = [0] + [gi + 1 for gi in goal_indices] + [len(events)]
         chains: list[ChainCandidate] = []
-        for play_num, (start, end) in enumerate(zip(boundaries, boundaries[1:], strict=False)):
+        for play_num, (start, end) in enumerate(zip(boundaries, boundaries[1:], )):
             play_events = events[start:end]
             if len(play_events) < 2:
                 continue
@@ -425,7 +425,7 @@ class RocketLeaguePlayerT(TranslationFunction):
         boundaries = [0] + [gi + 1 for gi in goal_indices] + [len(events)]
 
         chains: list[ChainCandidate] = []
-        for play_num, (start, end) in enumerate(zip(boundaries, boundaries[1:], strict=False)):
+        for play_num, (start, end) in enumerate(zip(boundaries, boundaries[1:], )):
             play_events = events[start:end]
             if len(play_events) < 2:
                 continue
