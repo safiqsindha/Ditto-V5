@@ -73,7 +73,7 @@ def score_batch(
         raise ValueError("chains, ground_truths, and model_responses must be same length")
     return [
         score_chain(chain, gt, resp)
-        for chain, gt, resp in zip(chains, ground_truths, model_responses, strict=True)
+        for chain, gt, resp in zip(chains, ground_truths, model_responses)
     ]
 
 
@@ -91,7 +91,7 @@ def extract_binary_vectors(
 
     baseline_vec = []
     intervention_vec = []
-    for b, i in zip(baseline_scores, intervention_scores, strict=True):
+    for b, i in zip(baseline_scores, intervention_scores):
         if exclude_abstain and (b.correct is None or i.correct is None):
             continue
         baseline_vec.append(bool(b.correct))

@@ -86,7 +86,7 @@ def run_mcnemar(
     if len(baseline_correct) != len(intervention_correct):
         raise ValueError("baseline and intervention lists must be same length")
 
-    pairs = list(zip(baseline_correct, intervention_correct, strict=True))
+    pairs = list(zip(baseline_correct, intervention_correct))
     a = sum(1 for b, i in pairs if b and i)
     b = sum(1 for b, i in pairs if b and not i)
     c = sum(1 for b, i in pairs if not b and i)
