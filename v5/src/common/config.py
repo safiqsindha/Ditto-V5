@@ -117,7 +117,7 @@ def _default_cell_configs() -> dict[str, CellConfig]:
     defaults = {
         "fortnite": (200, ["EPIC_ACCOUNT_ID", "EPIC_ACCESS_TOKEN"]),
         "nba": (300, []),
-        "csgo": (150, []),
+        "csgo": (150, ["FACEIT_API_KEY"]),
         "rocket_league": (250, ["BALLCHASING_TOKEN"]),
         "hearthstone": (300, ["HSREPLAY_API_KEY"]),
     }

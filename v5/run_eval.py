@@ -34,6 +34,10 @@ import logging
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()  # loads .env from project root (or any parent directory)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

@@ -29,75 +29,121 @@ def cfgs():
 # CS:GO — HLTV demo download via requests
 # ---------------------------------------------------------------------------
 
+_FAKE_FACEIT_STATS = {
+    "rounds": [
+        {
+            "match_id": "1-faceit-match-abc",
+            "round_stats": {"Map": "de_dust2", "Rounds": "29", "Score": "16:13", "Winner": "team_a"},
+            "teams": [
+                {
+                    "team_id": "team_a",
+                    "players": [
+                        {
+                            "player_id": "faceit_player_001",
+                            "nickname": "sniper42",
+                            "player_stats": {
+                                "Kills": "20", "Assists": "3", "Deaths": "15",
+                                "Headshots": "8", "Flash Count": "6",
+                                "Entry Count": "5", "MVPs": "2",
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+}
+
+
 class TestCSGORealFetch:
-    def test_fetch_downloads_demos(self, cfgs, tmp_path):
+    def test_fetch_returns_empty_without_api_key(self, cfgs, tmp_path):
         pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
-        # Limit sample target to make the test fast
-        pipeline.config.sample_target = 2
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.iter_content = lambda chunk_size: [b"FAKE_DEMO_BYTES"]
-
-        with patch("v5.src.cells.csgo.pipeline.requests.Session.get",
-                   return_value=mock_response) as mock_get:
-            paths = pipeline.fetch()
-        assert mock_get.called
-        assert len(paths) >= 1
-        for p in paths:
-            assert p.exists()
-            assert p.read_bytes() == b"FAKE_DEMO_BYTES"
-
-    def test_fetch_handles_non_200(self, cfgs, tmp_path):
-        pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
-        pipeline.config.sample_target = 2
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        with patch("v5.src.cells.csgo.pipeline.requests.Session.get",
-                   return_value=mock_response):
-            paths = pipeline.fetch()
-        # Non-200 → no download, no path
+        pipeline.api_key = ""
+        paths = pipeline.fetch()
         assert paths == []
 
-    def test_fetch_skips_already_downloaded(self, cfgs, tmp_path):
+    def test_fetch_skips_existing_json(self, cfgs, tmp_path, monkeypatch):
+        monkeypatch.setenv("FACEIT_API_KEY", "fake_key")
         pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
-        pipeline.config.sample_target = 2
-        # Pre-create a demo file matching the first match ID
-        match_ids = pipeline._get_target_match_ids()
-        existing = pipeline.raw_dir / f"{match_ids[0]}.dem"
-        existing.write_bytes(b"old")
-        with patch("v5.src.cells.csgo.pipeline.requests.Session.get"):
+        pipeline.config.sample_target = 1
+        existing = pipeline.raw_dir / "1-existing-match.json"
+        existing.write_text("{}")
+
+        champ_resp = MagicMock(status_code=200)
+        champ_resp.json.return_value = {"items": [{"championship_id": "champ1"}]}
+        match_resp = MagicMock(status_code=200)
+        match_resp.json.return_value = {"items": [{"match_id": "1-existing-match"}]}
+
+        with patch.object(pipeline.session, "get", side_effect=[champ_resp, match_resp]):
             paths = pipeline.fetch()
-        # Existing file should be in paths without HTTP call for it
-        assert any(p == existing for p in paths)
+        assert existing in paths
 
-    def test_parse_handles_missing_awpy(self, cfgs, tmp_path):
-        """awpy not installed → parse returns empty without crashing."""
+    def test_fetch_downloads_match_stats(self, cfgs, tmp_path, monkeypatch):
+        monkeypatch.setenv("FACEIT_API_KEY", "fake_key")
         pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
-        # Create one fake .dem
-        dem = pipeline.raw_dir / "test.dem"
-        dem.write_bytes(b"fake")
-        with patch.dict("sys.modules", {"awpy": None}):
-            records = pipeline.parse([dem])
-        assert records == []
+        pipeline.config.sample_target = 1
 
-    def test_extract_events_filters_falsy(self, cfgs, tmp_path):
+        champ_resp = MagicMock(status_code=200)
+        champ_resp.json.return_value = {"items": [{"championship_id": "champ1"}]}
+        match_resp = MagicMock(status_code=200)
+        match_resp.json.return_value = {"items": [{"match_id": "1-new-match"}]}
+        stats_resp = MagicMock(status_code=200)
+        stats_resp.json.return_value = _FAKE_FACEIT_STATS
+
+        with patch.object(pipeline.session, "get", side_effect=[champ_resp, match_resp, stats_resp]):
+            paths = pipeline.fetch()
+        assert len(paths) == 1
+        assert paths[0].name == "1-new-match.json"
+
+    def test_fetch_handles_stats_404(self, cfgs, tmp_path, monkeypatch):
+        monkeypatch.setenv("FACEIT_API_KEY", "fake_key")
         pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
-        # Mix of valid and None records
-        valid = {
+        pipeline.config.sample_target = 1
+
+        champ_resp = MagicMock(status_code=200)
+        champ_resp.json.return_value = {"items": [{"championship_id": "champ1"}]}
+        match_resp = MagicMock(status_code=200)
+        match_resp.json.return_value = {"items": [{"match_id": "1-missing-match"}]}
+        not_found_resp = MagicMock(status_code=404)
+
+        with patch.object(pipeline.session, "get", side_effect=[champ_resp, match_resp, not_found_resp]):
+            paths = pipeline.fetch()
+        assert paths == []
+
+    def test_parse_loads_json(self, cfgs, tmp_path):
+        pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
+        f = pipeline.raw_dir / "match1.json"
+        f.write_text('{"rounds": []}')
+        records = pipeline.parse([f])
+        assert len(records) == 1
+        assert records[0] == {"rounds": []}
+
+    def test_extract_events_faceit_format(self, cfgs, tmp_path):
+        pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
+        streams = pipeline.extract_events([_FAKE_FACEIT_STATS])
+        assert len(streams) == 1
+        # Kills(20) + Assists(3) + FlashCount(6) + EntryCount(5) + MVPs(2) = 36 events
+        assert len(streams[0].events) == 36
+
+    def test_extract_events_awpy_format(self, cfgs, tmp_path):
+        pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
+        awpy_record = {
             "matchID": "test_match",
             "mapName": "de_mirage",
             "rounds": [{"roundNum": 1, "startTick": 0, "kills": [], "grenades": [],
                         "bombEvents": [], "ctEqVal": 4250, "tEqVal": 4350}],
         }
-        streams = pipeline.extract_events([valid, None, valid])
+        streams = pipeline.extract_events([awpy_record, None, awpy_record])
         assert len(streams) == 2
 
-    def test_get_target_match_ids(self, cfgs, tmp_path):
+    def test_get_championship_ids_returns_list(self, cfgs, tmp_path, monkeypatch):
+        monkeypatch.setenv("FACEIT_API_KEY", "fake_key")
         pipeline = CSGOPipeline(config=cfgs["csgo"], data_root=tmp_path)
-        ids = pipeline._get_target_match_ids()
-        assert len(ids) > 0
-        assert all(isinstance(i, int) for i in ids)
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"items": [{"championship_id": "c1"}, {"championship_id": "c2"}]}
+        with patch.object(pipeline.session, "get", return_value=resp):
+            ids = pipeline._get_championship_ids()
+        assert ids == ["c1", "c2"]
 
 
 # ---------------------------------------------------------------------------
